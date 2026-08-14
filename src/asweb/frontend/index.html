@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>ANTISPICE WEB — Schematic Editor</title>
+<link rel="stylesheet" href="./styles.css?v=8">
+</head>
+
+<body>
+
+<aside id="toolbar" aria-label="Editor controls">
+    <h1><span>ANTISPICE</span><em>WEB</em></h1>
+    <nav aria-labelledby="modeHeading">
+        <h2 id="modeHeading">Mode</h2>
+        <div class="mode-switch" role="group" aria-label="Editor mode">
+            <button type="button" data-mode="edit">Edit</button>
+            <button type="button" data-mode="simulation">Simulate</button>
+        </div>
+    </nav>
+    <div class="simulation-only mode-notice"><strong>Transient mode</strong><span>Schematic frozen</span></div>
+    <nav class="edit-only" aria-labelledby="toolsHeading">
+        <h2 id="toolsHeading">Tools</h2>
+        <div class="tool-grid">
+            <button type="button" data-tool="select">Select</button>
+            <div class="button-grid">
+                <button type="button" data-rotate="-90" title="Rotate counterclockwise ([)">↺ 90°</button>
+                <button type="button" data-rotate="90" title="Rotate clockwise (])">90° ↻</button>
+            </div>
+        </div>
+    </nav>
+    <section class="edit-only" aria-labelledby="componentsHeading">
+        <h2 id="componentsHeading">Components</h2>
+        <div class="button-grid">
+            <button type="button" data-tool="resistor">Resistor</button>
+            <button type="button" data-tool="capacitor">Capacitor</button>
+            <button type="button" data-tool="inductor">Inductor</button>
+            <button type="button" data-tool="diode">Diode</button>
+            <button type="button" data-tool="voltage-source">V Source</button>
+            <button type="button" data-tool="current-source">I Source</button>
+            <button type="button" data-tool="npn-bjt">NPN</button>
+            <button type="button" data-tool="pnp-bjt">PNP</button>
+            <button type="button" data-tool="n-fet">N-type FET</button>
+            <button type="button" data-tool="p-fet">P-type FET</button>
+        </div>
+    </section>
+    <section class="edit-only" aria-labelledby="markersHeading">
+        <h2 id="markersHeading">Net markers</h2>
+        <div class="button-grid">
+            <button type="button" data-tool="GND">Ground</button>
+        </div>
+    </section>
+</aside>
+
+<main id="workspace" aria-label="Schematic workspace">
+    <svg id="editor" role="application" aria-label="Circuit schematic editor" aria-description="Use the mouse wheel to zoom">
+        <g id="wireLayer"></g>
+        <g id="junctionLayer"></g>
+        <g id="elementLayer"></g>
+        <g id="overlayLayer"></g>
+    </svg>
+</main>
+
+<aside id="circuitLists" aria-label="Circuit objects">
+    <section aria-labelledby="elementsHeading">
+        <h2 id="elementsHeading">Elements</h2>
+        <div id="elementList" class="object-list"></div>
+    </section>
+    <section aria-labelledby="netsHeading">
+        <h2 id="netsHeading">Nets</h2>
+        <div id="netList" class="object-list"></div>
+    </section>
+    <section class="edit-only" aria-labelledby="markerListHeading">
+        <h2 id="markerListHeading">Markers</h2>
+        <div id="markerList" class="object-list"></div>
+    </section>
+</aside>
+
+<aside id="properties" aria-labelledby="propertiesHeading">
+    <h2 id="propertiesHeading">Properties</h2>
+    <div id="propertyContent">Nothing selected</div>
+</aside>
+
+<footer id="statusStrip" aria-label="Editor status">
+    <strong id="statusMode">EDIT</strong>
+    <span>ZOOM <output id="statusZoom">100%</output></span>
+    <span>ELEMENTS <output id="statusElements">0</output></span>
+    <span>NETS <output id="statusNets">0</output></span>
+    <span>WIRES <output id="statusWires">0</output></span>
+    <span id="statusState">EDITABLE</span>
+</footer>
+
+<script type="module" src="./editor.js?v=19"></script>
+</body>
+</html>
