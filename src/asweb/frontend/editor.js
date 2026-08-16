@@ -1,5 +1,5 @@
 import {library} from "./library.js?v=12";
-import {distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
+import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, takeId, withImmutableId} from "./circuit.js?v=12";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -1641,6 +1641,10 @@ function resizeViewport() {
 
 function updateViewBox() {
     svg.setAttribute("viewBox", `${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`);
+    const scale = viewportPixels.width && viewport.width ? viewport.width / viewportPixels.width : 1;
+    svg.style.setProperty("--grid-size", `${GRID / scale}px`);
+    svg.style.setProperty("--grid-x", `${-viewport.x / scale}px`);
+    svg.style.setProperty("--grid-y", `${-viewport.y / scale}px`);
     updateStatus();
 }
 

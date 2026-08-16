@@ -32,7 +32,7 @@ button:focus-visible, input:focus-visible {outline: 4px solid var(--blue); outli
 #workspace {position: relative; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--paper);}
 #workspace::after {position: absolute; right: 3%; bottom: 1%; z-index: 2; color: var(--ink); font-family: var(--display); font-size: clamp(90px, 17vw, 260px); letter-spacing: -.04em; line-height: .75; opacity: .045; pointer-events: none; content: "EDIT";}
 body[data-mode="simulation"] #workspace::after {color: var(--red); content: "SIMULATE";}
-#editor {position: relative; z-index: 1; display: block; width: 100%; height: 100%; background-color: var(--paper); background-image: linear-gradient(#dedbd1 1px, transparent 1px), linear-gradient(90deg, #dedbd1 1px, transparent 1px); background-size: 20px 20px;}
+#editor {position: relative; z-index: 1; display: block; width: 100%; height: 100%; background-color: var(--paper); background-image: linear-gradient(#dedbd1 1px, transparent 1px), linear-gradient(90deg, #dedbd1 1px, transparent 1px); background-position: var(--grid-x, 0) var(--grid-y, 0); background-size: var(--grid-size, 20px) var(--grid-size, 20px);}
 body[data-mode="simulation"] #editor {background-image: linear-gradient(#cce9ed 1px, transparent 1px), linear-gradient(90deg, #cce9ed 1px, transparent 1px);}
 body[data-mode="simulation"] #workspace {box-shadow: inset 0 0 0 5px var(--blue);}
 body[data-mode="simulation"] .element {cursor: default;}
