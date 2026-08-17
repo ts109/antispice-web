@@ -1,6 +1,7 @@
-import {library} from "./library.js?v=12";
+import {availableDefinitions, compileCircuit, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=1";
+import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=15";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
-import {circuit, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, takeId, withImmutableId} from "./circuit.js?v=12";
+import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, takeId, withImmutableId} from "./circuit.js?v=14";
 
 const NS = "http://www.w3.org/2000/svg";
 window.generateNetlist = generateNetlist;
@@ -22,6 +23,7 @@ const netList = document.querySelector("#netList");
 const elementsHeading = document.querySelector("#elementsHeading");
 const netsHeading = document.querySelector("#netsHeading");
 const propertiesHeading = document.querySelector("#propertiesHeading");
+const componentTools = document.querySelector("#componentTools");
 const statusMode = document.querySelector("#statusMode");
 const statusZoom = document.querySelector("#statusZoom");
 const statusElements = document.querySelector("#statusElements");
@@ -48,7 +50,58 @@ let junctionDrag = null;
 let viewport = {x: 0, y: 0, width: 0, height: 0};
 let viewportPixels = {width: 0, height: 0};
 const ZOOM_FACTORS = [15, 18, 22, 27, 33, 39, 47, 56, 68, 82, 100, 120, 150, 180, 220, 270, 330, 390];
-const application = {mode: "edit", transient: {visibleNets: new Set(), visiblePorts: new Map()}};
+const application = {mode: "edit", libraryReady: false, libraryError: "", compilation: {state: "idle", message: ""}, transient: {visibleNets: new Set(), visiblePorts: new Map()}};
+
+function symbolForDefinition(use, overrides = {}) {
+    const resolved = resolveModel(use);
+    const resolvedName = resolveModelName(use);
+    if (!resolved) return null;
+    const parameters = {...inheritedParameters(use), ...overrides};
+    const negative = Number(parameters.polarity) < 0;
+    const presentation = modelPresentation(resolvedName, negative);
+    if (presentation) return presentation.symbol;
+    if (library[resolvedName]) return resolvedName;
+    return ensureGenericSymbol(`generic:${resolvedName ?? use}`, resolved.ports);
+}
+
+function bindToolButton(button) {
+    button.addEventListener("click", () => {
+        const type = button.dataset.tool;
+        if (type === "select") cancelCurrentOperation();
+        else enterPlacementMode(type);
+    });
+}
+
+function rebuildComponentTools() {
+    componentTools.replaceChildren();
+    for (const [name, definition] of Object.entries(availableDefinitions())) {
+        if (definition.type === "part") continue;
+        const button = document.createElement("button");
+        const label = document.createElement("span");
+        const reference = document.createElement("small");
+        const resolvedName = resolveModelName(name);
+        button.type = "button";
+        button.dataset.tool = name;
+        label.textContent = definitionDisplayName(name, definition, resolvedName);
+        label.className = "component-name";
+        reference.textContent = name;
+        reference.className = "component-reference";
+        button.title = `${name} (${definition.type})`;
+        button.append(label);
+        if (label.textContent !== name) button.append(reference);
+        bindToolButton(button);
+        componentTools.append(button);
+    }
+}
+
+function compatibleDefinitions(use) {
+    const currentModel = resolveModelName(use);
+    const currentFamily = modelFamily(currentModel);
+    return Object.entries(availableDefinitions()).filter(([name]) => {
+        const candidateModel = resolveModelName(name);
+        return currentFamily ? modelFamily(candidateModel) === currentFamily : candidateModel === currentModel;
+    });
+}
 
 
 // ============================================================================
@@ -65,7 +118,7 @@ function enterSelectMode() {
 
 
 function enterPlacementMode(type) {
-    if (application.mode === "simulation") {
+    if (application.mode === "simulation" || !application.libraryReady) {
         return;
     }
     placingType = type;
@@ -137,8 +190,16 @@ function setMode(mode) {
     updateStatus();
 }
 
-function startSimulation() {
-    console.log(JSON.stringify(generateNetlist(), null, 2));
+async function startSimulation() {
+    application.compilation = {state: "working", message: "Compiling circuit…"};
+    renderProperties();
+    try {
+        const result = await compileCircuit(generateCompilationElements(resolveModel));
+        application.compilation = {state: "ready", message: `Compiled ${result.stateSize} state variables.`};
+    } catch (error) {
+        application.compilation = {state: "error", message: error.message};
+    }
+    if (application.mode === "simulation") renderProperties();
 }
 
 function updateStatus() {
@@ -197,21 +258,7 @@ function portCurrentVisible(element, portName) {
 }
 
 
-for (const button of document.querySelectorAll("#toolbar [data-tool]")) {
-
-    button.addEventListener(
-        "click",
-        () => {
-
-            const type = button.dataset.tool;
-
-            if (type === "select")
-                cancelCurrentOperation();
-            else
-                enterPlacementMode(type);
-        }
-    );
-}
+for (const button of document.querySelectorAll("#toolbar [data-tool]")) bindToolButton(button);
 
 for (const button of document.querySelectorAll("#toolbar [data-rotate]")) {
     button.addEventListener("click", () => rotateSelected(Number(button.dataset.rotate)));
@@ -224,6 +271,18 @@ for (const button of document.querySelectorAll("#toolbar [data-mode]")) {
 
 // Initial/default mode.
 setMode("edit");
+loadLibrary().then(() => {
+    application.libraryReady = true;
+    rebuildComponentTools();
+    for (const element of circuit.elements.values()) {
+        element.use ??= element.model;
+        element.electricalPorts ??= resolveModel(element.use)?.ports ?? library[element.model].ports.map(port => port.name);
+    }
+    renderProperties();
+}).catch(error => {
+    application.libraryError = error.message;
+    propertyContent.textContent = error.message;
+});
 
 
 // ============================================================================
@@ -344,7 +403,7 @@ svg.addEventListener("pointerdown", event => {
         if (placingType !== null) {
             const p = snapPoint(svgPoint(event));
             const type = placingType;
-            const marker = library[type].kind === "marker";
+            const marker = library[type]?.kind === "marker";
             const object = marker ? createMarker(type, p.x, p.y) : createElement(type, p.x, p.y);
 
             // One-shot placement.
@@ -424,12 +483,16 @@ window.addEventListener("keydown", event => {
 // Components
 // ============================================================================
 
-function createElement(model, x, y) {
+function createElement(use, x, y) {
+    const model = symbolForDefinition(use, {});
     const definition = library[model];
-    const parameters = Object.fromEntries(Object.entries(definition.parameters).map(([name, parameter]) => [name, parameter.default]));
+    const parameters = Object.fromEntries(Object.entries(definition.parameters).filter(([, parameter]) => parameter.default !== undefined).map(([name, parameter]) => [name, parameter.default]));
+    const electricalPorts = resolveModel(use)?.ports ?? definition.ports.map(port => port.name);
 
     const element = withImmutableId({
         model,
+        use,
+        electricalPorts,
         x,
         y,
         rotation: 0,
@@ -464,6 +527,45 @@ function createElement(model, x, y) {
     renderElement(element);
 
     return element;
+}
+
+function changeElementDefinition(element, use) {
+    const resolved = resolveModel(use);
+    if (!resolved) return;
+    const symbol = symbolForDefinition(use, element.parameters);
+
+    if (element.ports.length !== resolved.ports.length) {
+        detachNodes(element.ports);
+        element.ports = [];
+        library[symbol].ports.forEach((port, index) => {
+            const point = rotatePoint(port, element.rotation);
+            const node = {id: takeId("node"), kind: "terminal", element: element.id, port: resolved.ports[index], x: element.x + point.x, y: element.y + point.y, axis: rotatedAxis(port.axis, element.rotation)};
+            circuit.nodes.set(node.id, node);
+            element.ports.push(node.id);
+        });
+    }
+
+    element.use = use;
+    element.model = symbol;
+    element.electricalPorts = [...resolved.ports];
+    element.parameters = Object.fromEntries(Object.entries(element.parameters).filter(([name]) => resolved.parameters.includes(name)));
+    element.ports.forEach((nodeId, index) => circuit.nodes.get(nodeId).port = resolved.ports[index]);
+    updateTerminalNodes(element);
+    elementLayer.querySelector(`[data-element-id="${element.id}"]`)?.remove();
+    rebuildNets();
+    renderElement(element);
+    renderLists();
+    renderProperties();
+}
+
+function refreshElementSymbol(element) {
+    const symbol = symbolForDefinition(element.use, element.parameters);
+    if (!symbol || symbol === element.model) return;
+    element.model = symbol;
+    updateTerminalNodes(element);
+    elementLayer.querySelector(`[data-element-id="${element.id}"]`)?.remove();
+    renderElement(element);
+    renderLists();
 }
 
 function createMarker(type, x, y) {
@@ -633,7 +735,7 @@ function renderElement(element) {
         selected?.kind === "element" &&
         selected.id === element.id
     );
-    g.classList.toggle("signal-selected", application.mode === "simulation" && element.ports.some((nodeId, index) => portCurrentVisible(element, library[element.model].ports[index].name)));
+    g.classList.toggle("signal-selected", application.mode === "simulation" && element.ports.some((nodeId, index) => portCurrentVisible(element, element.electricalPorts?.[index] ?? library[element.model].ports[index].name)));
 
 
     // --------------------------------------------------
@@ -646,7 +748,7 @@ function renderElement(element) {
         if (!visible)
             return;
 
-        visible.classList.toggle("signal-active", application.mode === "simulation" && portCurrentVisible(element, library[element.model].ports[index].name));
+        visible.classList.toggle("signal-active", application.mode === "simulation" && portCurrentVisible(element, element.electricalPorts?.[index] ?? library[element.model].ports[index].name));
         visible.style.display = nodeDegree(nodeId) > 0 ? "none" : "";
     });
 }
@@ -1067,7 +1169,7 @@ function renderOverlay() {
         g.classList.add("preview");
 
         g.setAttribute("transform", `translate(${placingPosition.x} ${placingPosition.y})`);
-        library[placingType].draw(g);
+        library[library[placingType]?.kind === "marker" ? placingType : symbolForDefinition(placingType, {})].draw(g);
         overlayLayer.append(g);
     }
 
@@ -1160,7 +1262,7 @@ function renderLists() {
         if (application.mode === "edit") {
             const button = document.createElement("button");
             button.type = "button";
-            button.textContent = `${element.reference} · ${element.model}`;
+            button.textContent = `${element.reference} · ${element.use}`;
             button.classList.toggle("active", selected?.kind === "element" && selected.id === element.id);
             button.addEventListener("click", () => select({kind: "element", id: element.id}));
             elementList.append(button);
@@ -1171,9 +1273,9 @@ function renderLists() {
             group.className = "simulation-element";
             name.className = "simulation-element-name";
             ports.className = "simulation-ports";
-            name.textContent = `${element.reference} · ${element.model}`;
+            name.textContent = `${element.reference} · ${element.use}`;
             element.ports.forEach((nodeId, index) => {
-                const portName = library[element.model].ports[index].name;
+                const portName = element.electricalPorts?.[index] ?? library[element.model].ports[index].name;
                 const button = document.createElement("button");
                 button.type = "button";
                 button.textContent = portName;
@@ -1297,9 +1399,28 @@ function renderProperties() {
         input.setCustomValidity("");
         input.removeAttribute("aria-invalid");
     }, identity);
-    const model = document.createElement("p");
-    model.textContent = `Model: ${element.model}`;
-    identity.append(model);
+    const definitionLabel = document.createElement("label");
+    const definitionSelect = document.createElement("select");
+    definitionLabel.htmlFor = `definition-${element.id}`;
+    definitionLabel.textContent = "Definition";
+    definitionSelect.id = `definition-${element.id}`;
+    for (const [name, definition] of compatibleDefinitions(element.use)) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = `${name} · ${definition.type}`;
+        option.selected = name === element.use;
+        definitionSelect.append(option);
+    }
+    definitionSelect.addEventListener("change", () => changeElementDefinition(element, definitionSelect.value));
+    const definitionProperty = document.createElement("div");
+    definitionProperty.className = "property";
+    definitionProperty.append(definitionLabel, definitionSelect);
+    identity.append(definitionProperty);
+    if (!resolveModel(element.use)) {
+        const warning = document.createElement("p");
+        warning.textContent = `Definition ${element.use} is not available from the backend.`;
+        identity.append(warning);
+    }
 
     const connections = propertySection("Connections");
     const nets = document.createElement("dl");
@@ -1307,38 +1428,85 @@ function renderProperties() {
     element.ports.forEach((nodeId, index) => {
         const port = document.createElement("dt");
         const name = document.createElement("dd");
-        port.textContent = library[element.model].ports[index].name;
+        port.textContent = element.electricalPorts?.[index] ?? library[element.model].ports[index].name;
         name.textContent = netForNode(nodeId).name;
         nets.append(port, name);
     });
     connections.append(nets);
 
     const parameters = propertySection("Parameters", "parameters-box");
-    for (const [name, value] of Object.entries(element.parameters)) {
-        const definition = library[element.model].parameters[name];
+    const electricalModel = resolveModel(element.use);
+    const inherited = inheritedParameters(element.use);
+    for (const name of electricalModel?.parameters ?? []) {
+        const overridden = Object.hasOwn(element.parameters, name);
+        const inheritedValue = inherited[name];
+        const value = overridden ? element.parameters[name] : inheritedValue;
         const update = input => {
-            const value = parseFloat(input.value);
-            element.parameters[name] = Number.isNaN(value) ? undefined : value;
-            input.setCustomValidity(Number.isNaN(value) ? "Numeric value required." : "");
-            input.toggleAttribute("aria-invalid", Number.isNaN(value));
-        };
-        const normalize = input => {
-            update(input);
-            if (element.parameters[name] !== undefined) {
-                input.value = element.parameters[name].toString();
+            const text = input.value.trim();
+            if (!text) delete element.parameters[name];
+            else {
+                const numeric = Number(text);
+                element.parameters[name] = Number.isNaN(numeric) ? text : numeric;
             }
+            refreshElementSymbol(element);
+            renderProperties();
         };
-        appendProperty(name, value, update, normalize, parameters, definition.unit, true);
+        appendProperty(name, value, null, null, parameters, "", false);
+        const row = parameters.lastElementChild;
+        const input = row.querySelector("input");
+        const source = document.createElement("small");
+        source.className = "parameter-source";
+        source.textContent = overridden ? "instance override" : inheritedValue !== undefined ? "part value" : "missing";
+        row.classList.toggle("parameter-missing", value === undefined);
+        input.placeholder = inheritedValue !== undefined ? String(inheritedValue) : "required";
+        input.toggleAttribute("aria-invalid", value === undefined);
+        input.addEventListener("change", () => update(input));
+        row.append(source);
     }
-    if (!Object.keys(element.parameters).length) {
+    if (!electricalModel?.parameters.length) {
         parameters.append("No parameters");
     }
+    if (electricalModel) renderModelEquations(resolveModelName(element.use), electricalModel);
+}
+
+function renderModelEquations(modelName, model) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    const reference = document.createElement("p");
+    summary.textContent = "Model equations";
+    reference.className = "model-reference";
+    reference.textContent = modelName ?? "inline model";
+    details.className = "model-equations";
+    details.append(summary, reference);
+
+    const auxiliaries = Object.entries(model.auxiliaries ?? {});
+    if (auxiliaries.length) {
+        const heading = document.createElement("h4");
+        heading.textContent = "Auxiliary expressions";
+        details.append(heading);
+        for (const [name, expression] of auxiliaries) {
+            const code = document.createElement("code");
+            code.textContent = `${name} = ${expression}`;
+            details.append(code);
+        }
+    }
+
+    const heading = document.createElement("h4");
+    heading.textContent = "Equations";
+    details.append(heading);
+    for (const equation of model.equations) {
+        const code = document.createElement("code");
+        code.textContent = `${equation} = 0`;
+        details.append(code);
+    }
+    propertyContent.append(details);
 }
 
 function renderSimulationProperties() {
     const status = propertySection("Simulation mode");
     const explanation = document.createElement("p");
-    explanation.textContent = "The schematic is frozen. Toggle net voltages and port currents in the schematic or signal lists.";
+    explanation.textContent = application.compilation.message || "The schematic is frozen while it is compiled.";
+    status.dataset.state = application.compilation.state;
     status.append(explanation);
 
     const active = propertySection("Displayed signals", "simulation-signals");
@@ -1464,14 +1632,7 @@ function deleteSelected() {
         if (!marker) {
             return;
         }
-        for (const nodeId of marker.ports) {
-            for (const wire of [...circuit.wires.values()]) {
-                if (wire.a === nodeId || wire.b === nodeId) {
-                    deleteWire(wire.id);
-                }
-            }
-            circuit.nodes.delete(nodeId);
-        }
+        detachNodes(marker.ports);
         circuit.markers.delete(marker.id);
         elementLayer.querySelector(`[data-marker-id="${marker.id}"]`)?.remove();
         rebuildNets();
@@ -1488,16 +1649,7 @@ function deleteSelected() {
         if (!element)
             return;
 
-        for (const nodeId of element.ports) {
-            for (const wire of [...circuit.wires.values()]) {
-
-                if (wire.a === nodeId || wire.b === nodeId) {
-                    deleteWire(wire.id);
-                }
-            }
-
-            circuit.nodes.delete(nodeId);
-        }
+        detachNodes(element.ports);
 
         circuit.elements.delete(element.id);
 
@@ -1537,6 +1689,12 @@ function deleteWire(id) {
 function removeWireRaw(wire) {
     circuit.wires.delete(wire.id);
     wireLayer.querySelector(`[data-wire-id="${wire.id}"]`)?.remove();
+}
+
+function detachNodes(nodeIds) {
+    const {neighbors, removedWires} = detachCircuitNodes(nodeIds);
+    for (const wire of removedWires) wireLayer.querySelector(`[data-wire-id="${wire.id}"]`)?.remove();
+    for (const nodeId of neighbors) cleanupJunction(nodeId);
 }
 
 function cleanupJunction(nodeId) {

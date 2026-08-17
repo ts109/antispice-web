@@ -1,5 +1,44 @@
 const NS = "http://www.w3.org/2000/svg";
 
+const modelPresentations = {
+    resistor: {displayName: "Resistor", symbol: "resistor"},
+    capacitor: {displayName: "Capacitor", symbol: "capacitor"},
+    inductor: {displayName: "Inductor", symbol: "inductor"},
+    "voltage-source": {displayName: "Voltage source", symbol: "voltage-source"},
+    "current-source": {displayName: "Current source", symbol: "current-source"},
+};
+
+const modelFamilies = [
+    {prefix: "diode-", displayName: "Diode", symbols: ["diode"]},
+    {prefix: "bjt-", displayName: "BJT", symbols: ["npn-bjt", "pnp-bjt"]},
+    {prefix: "fet-", displayName: "FET", symbols: ["n-fet", "p-fet"]},
+    {prefix: "mosfet-", displayName: "MOSFET", symbols: ["n-fet", "p-fet"]},
+];
+
+export function modelFamily(modelReference) {
+    if (typeof modelReference !== "string") return null;
+    const family = modelFamilies.find(candidate => modelReference === candidate.prefix.slice(0, -1) || modelReference.startsWith(candidate.prefix));
+    return family?.prefix ?? null;
+}
+
+export function modelPresentation(modelReference, negative = false) {
+    const exact = modelPresentations[modelReference];
+    if (exact) return exact;
+    const familyPrefix = modelFamily(modelReference);
+    const family = modelFamilies.find(candidate => candidate.prefix === familyPrefix);
+    if (!family) return null;
+    const detail = modelReference.startsWith(family.prefix) ? modelReference.slice(family.prefix.length).replaceAll("-", " ") : "";
+    return {
+        displayName: detail ? `${family.displayName} · ${detail}` : family.displayName,
+        symbol: family.symbols[negative ? 1 : 0] ?? family.symbols[0],
+    };
+}
+
+export function definitionDisplayName(reference, definition, resolvedModelReference) {
+    if (definition.type === "part") return reference;
+    return modelPresentation(resolvedModelReference)?.displayName ?? reference;
+}
+
 function svgElement(name, attributes = {}) {
     const element = document.createElementNS(NS, name);
     for (const [key, value] of Object.entries(attributes)) {
@@ -35,7 +74,7 @@ function addArrow(parent, x1, y1, x2, y2) {
 }
 
 function sourceDefinition(controlled, current, referencePrefix) {
-    const ports = controlled ? [{name: "+", x: 0, y: -40, axis: "v"}, {name: "-", x: 0, y: 40, axis: "v"}, {name: "control+", x: -40, y: -20, axis: "h"}, {name: "control-", x: -40, y: 20, axis: "h"}] : [{name: "+", x: 0, y: -40, axis: "v"}, {name: "-", x: 0, y: 40, axis: "v"}];
+    const ports = controlled ? [{name: "+", x: 0, y: -40, axis: "v"}, {name: "-", x: 0, y: 40, axis: "v"}, {name: "control+", x: -40, y: -20, axis: "h"}, {name: "control-", x: -40, y: 20, axis: "h"}] : [{name: "ref", x: 0, y: 40, axis: "v"}, {name: "p", x: 0, y: -40, axis: "v"}];
 
     return {
         referencePrefix,
@@ -71,7 +110,7 @@ function transistorDefinition(npn) {
         labelPosition: {x: 32, y: -14},
         parameters: {},
         hitBox: {x: -45, y: -42, width: 90, height: 84},
-        ports: [{name: "B", x: -40, y: 0, axis: "h"}, {name: "C", x: 20, y: -40, axis: "v"}, {name: "E", x: 20, y: 40, axis: "v"}],
+        ports: [{name: "E", x: 20, y: 40, axis: "v"}, {name: "B", x: -40, y: 0, axis: "h"}, {name: "C", x: 20, y: -40, axis: "v"}],
         draw(g) {
             addLine(g, -40, 0, -10, 0);
             addLine(g, -10, -20, -10, 20);
@@ -89,7 +128,7 @@ function fetDefinition(p) {
         labelPosition: {x: 32, y: -14},
         parameters: {},
         hitBox: {x: -45, y: -42, width: 90, height: 84},
-        ports: [{name: "G", x: -40, y: 0, axis: "h"}, {name: "D", x: 20, y: -40, axis: "v"}, {name: "S", x: 20, y: 40, axis: "v"}],
+        ports: [{name: "S", x: 20, y: 40, axis: "v"}, {name: "G", x: -40, y: 0, axis: "h"}, {name: "D", x: 20, y: -40, axis: "v"}],
         draw(g) {
             addLine(g, -40, 0, -15, 0);
             addLine(g, -10, -22, -10, 22);
@@ -111,7 +150,7 @@ export const library = {
         labelPosition: {x: -18, y: -18},
         parameters: {resistance: {unit: "Ω"}},
         hitBox: {x: -45, y: -15, width: 90, height: 30},
-        ports: [{name: "1", x: -40, y: 0, axis: "h"}, {name: "2", x: 40, y: 0, axis: "h"}],
+        ports: [{name: "ref", x: -40, y: 0, axis: "h"}, {name: "p", x: 40, y: 0, axis: "h"}],
         draw(g) {
             addLine(g, -40, 0, -25, 0);
             addPath(g, "M -25 0 L -20 -10 L -10 10 L 0 -10 L 10 10 L 20 -10 L 25 0");
@@ -123,7 +162,7 @@ export const library = {
         labelPosition: {x: -18, y: -20},
         parameters: {capacitance: {unit: "F"}},
         hitBox: {x: -45, y: -20, width: 90, height: 40},
-        ports: [{name: "1", x: -40, y: 0, axis: "h"}, {name: "2", x: 40, y: 0, axis: "h"}],
+        ports: [{name: "ref", x: -40, y: 0, axis: "h"}, {name: "p", x: 40, y: 0, axis: "h"}],
         draw(g) {
             addLine(g, -40, 0, -8, 0);
             addLine(g, 8, 0, 40, 0);
@@ -136,7 +175,7 @@ export const library = {
         labelPosition: {x: -18, y: -20},
         parameters: {inductance: {unit: "H"}},
         hitBox: {x: -45, y: -18, width: 90, height: 36},
-        ports: [{name: "1", x: -40, y: 0, axis: "h"}, {name: "2", x: 40, y: 0, axis: "h"}],
+        ports: [{name: "ref", x: -40, y: 0, axis: "h"}, {name: "p", x: 40, y: 0, axis: "h"}],
         draw(g) {
             addLine(g, -40, 0, -24, 0);
             addPath(g, "M -24 0 C -24 -16 -8 -16 -8 0 C -8 -16 8 -16 8 0 C 8 -16 24 -16 24 0");
@@ -174,3 +213,35 @@ export const library = {
         }
     }
 };
+
+export function ensureGenericSymbol(key, ports) {
+    if (library[key]) return key;
+    const spacing = 24;
+    const height = Math.max(60, (ports.length - 1) * spacing + 24);
+    const leftCount = Math.ceil(ports.length / 2);
+    const positions = ports.map((name, index) => {
+        const left = index < leftCount;
+        const sideIndex = left ? index : index - leftCount;
+        const sideCount = left ? leftCount : ports.length - leftCount;
+        return {
+            name,
+            x: left ? -50 : 50,
+            y: (sideIndex - (sideCount - 1) / 2) * spacing,
+            axis: "h",
+        };
+    });
+    library[key] = {
+        referencePrefix: "X",
+        labelPosition: {x: -32, y: -height / 2 - 8},
+        parameters: {},
+        hitBox: {x: -52, y: -height / 2 - 2, width: 104, height: height + 4},
+        ports: positions,
+        draw(g) {
+            const body = svgElement("rect", {x: -38, y: -height / 2, width: 76, height, rx: 3});
+            body.classList.add("symbol");
+            g.append(body);
+            for (const port of positions) addLine(g, port.x, port.y, port.x < 0 ? -38 : 38, port.y);
+        },
+    };
+    return key;
+}

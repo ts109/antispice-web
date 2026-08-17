@@ -1,0 +1,230 @@
+"""FastAPI backend and static frontend hosting for Antispice Web."""
+
+import base64
+import logging
+import os
+from pathlib import Path
+from time import perf_counter
+from typing import Any
+from uuid import uuid4
+
+import antispice
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger("asweb.backend")
+
+
+def _configure_logging() -> None:
+    """Configure backend logging in this process, including reload workers."""
+    level_name = os.environ.get("ASWEB_LOG_LEVEL", "INFO").upper()
+    level = logging.getLevelNamesMapping().get(level_name)
+    if level is None:
+        valid = "DEBUG, INFO, WARNING, ERROR, CRITICAL"
+        message = f"invalid ASWEB_LOG_LEVEL {level_name!r}; expected one of: {valid}"
+        raise ValueError(message)
+
+    logger.setLevel(level)
+    logger.propagate = False
+    if not any(handler.get_name() == "asweb" for handler in logger.handlers):
+        handler = logging.StreamHandler()
+        handler.set_name("asweb")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        logger.addHandler(handler)
+
+
+_configure_logging()
+
+
+class ElementRequest(BaseModel):
+    """One frontend element in electrical, rather than graphical, form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reference: str = Field(min_length=1)
+    use: str = Field(min_length=1)
+    nodes: dict[str, str]
+    parameters: dict[str, str | int | float] = Field(default_factory=dict)
+
+
+class CompileRequest(BaseModel):
+    """A versioned circuit compilation request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = 1
+    elements: list[ElementRequest]
+
+
+def _encode_definition(definition: antispice.Definition) -> dict[str, Any]:
+    if isinstance(definition, antispice.Model):
+        return {
+            "type": "model",
+            "ports": list(definition.ports),
+            "parameters": list(definition.parameters),
+            "equations": list(definition.equations),
+            "auxiliaries": dict(definition.auxiliaries),
+        }
+    return {
+        "type": "part",
+        "model": definition.model if isinstance(definition.model, str) else _encode_definition(definition.model),
+        "parameters": dict(definition.parameters),
+    }
+
+
+def _make_circuit(request: CompileRequest) -> antispice.Circuit:
+    if request.version != 1:
+        message = f"unsupported circuit document version: {request.version}"
+        raise ValueError(message)
+
+    circuit = antispice.Circuit()
+    for encoded in request.elements:
+        if encoded.reference in circuit.elements:
+            message = f"duplicate element reference: {encoded.reference!r}"
+            raise ValueError(message)
+
+        probe = antispice.Element(encoded.use, (), encoded.parameters)
+        model = circuit.resolve_model(probe)
+        missing_ports = [port for port in model.ports if port not in encoded.nodes]
+        unknown_ports = sorted(set(encoded.nodes) - set(model.ports))
+        if missing_ports:
+            message = f"element {encoded.reference!r} is missing ports: {', '.join(missing_ports)}"
+            raise ValueError(message)
+        if unknown_ports:
+            message = f"element {encoded.reference!r} has unknown ports: {', '.join(unknown_ports)}"
+            raise ValueError(message)
+
+        circuit.elements[encoded.reference] = antispice.Element(
+            encoded.use,
+            tuple(encoded.nodes[port] for port in model.ports),
+            dict(encoded.parameters),
+        )
+    return circuit
+
+
+def _library_response() -> dict[str, Any]:
+    models = sum(isinstance(definition, antispice.Model) for definition in antispice.BUILTIN_LIBRARY.values())
+    parts = len(antispice.BUILTIN_LIBRARY) - models
+    logger.info("serving library definitions=%d models=%d parts=%d", len(antispice.BUILTIN_LIBRARY), models, parts)
+    return {"definitions": {name: _encode_definition(definition) for name, definition in antispice.BUILTIN_LIBRARY.items()}}
+
+
+def _compile_response(request: CompileRequest, compilation_id: str | None = None) -> dict[str, Any]:
+    compilation_id = compilation_id or uuid4().hex[:8]
+    started = perf_counter()
+    uses = {element.use for element in request.elements}
+    logger.info(
+        "compile[%s] started version=%d elements=%d definitions=%s",
+        compilation_id,
+        request.version,
+        len(request.elements),
+        sorted(uses),
+    )
+    for element in request.elements:
+        logger.debug(
+            "compile[%s] element reference=%s use=%s nodes=%s override_parameters=%s",
+            compilation_id,
+            element.reference,
+            element.use,
+            element.nodes,
+            sorted(element.parameters),
+        )
+
+    circuit = _run_compile_stage(compilation_id, "request translation", lambda: _make_circuit(request))
+    system = _run_compile_stage(compilation_id, "circuit flattening", lambda: antispice.compile_circuit(circuit))
+    state_size = len(system.state)
+    logger.info(
+        "compile[%s] equation system states=%d equations=%d newton_unknowns=%d",
+        compilation_id,
+        state_size,
+        len(system.equations),
+        2 * state_size,
+    )
+    step = _run_compile_stage(compilation_id, "Radau discretization", lambda: antispice.discretize_radau_iia(system))
+    function = _run_compile_stage(compilation_id, "symbolic Newton/LU transpilation", lambda: antispice.transpile_radau_newton_step(step))
+    memory = antispice.radau_memory_layout(system)
+    required_pages = max(1, (memory.byte_length + 65_535) // 65_536)
+    wasm = _run_compile_stage(compilation_id, "WebAssembly emission", lambda: antispice.WasmGenerator(memory_pages=required_pages).generate(function))
+    javascript = _run_compile_stage(compilation_id, "JavaScript wrapper generation", lambda: antispice.generate_javascript_radau_wrapper(system))
+    logger.info(
+        "compile[%s] completed duration=%.3fs wasm_bytes=%d javascript_bytes=%d",
+        compilation_id,
+        perf_counter() - started,
+        len(wasm),
+        len(javascript.encode()),
+    )
+    return {
+        "wasm": base64.b64encode(wasm).decode("ascii"),
+        "javascript": javascript,
+        "stateSize": len(system.state),
+        "layout": {
+            "potentials": system.layout.potentials,
+            "currents": {
+                reference: {port: index for (element, port), index in system.layout.currents.items() if element == reference}
+                for reference in dict.fromkeys(element for element, _ in system.layout.currents)
+            },
+        },
+    }
+
+
+def _run_compile_stage(compilation_id: str, name: str, operation: Any) -> Any:
+    started = perf_counter()
+    logger.info("compile[%s] stage=%s started", compilation_id, name)
+    try:
+        result = operation()
+    except Exception:
+        logger.exception("compile[%s] stage=%s failed duration=%.3fs", compilation_id, name, perf_counter() - started)
+        raise
+    logger.info("compile[%s] stage=%s completed duration=%.3fs", compilation_id, name, perf_counter() - started)
+    return result
+
+
+def create_app() -> FastAPI:
+    """Create the API and mount its packaged static frontend."""
+    application = FastAPI(title="Antispice Web", version="0.1")
+
+    @application.middleware("http")
+    async def log_request(request: Request, call_next: Any) -> Any:
+        started = perf_counter()
+        logger.info("request started method=%s path=%s", request.method, request.url.path)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception("request failed method=%s path=%s duration=%.3fs", request.method, request.url.path, perf_counter() - started)
+            raise
+        logger.info(
+            "request completed method=%s path=%s status=%d duration=%.3fs",
+            request.method,
+            request.url.path,
+            response.status_code,
+            perf_counter() - started,
+        )
+        return response
+
+    @application.get("/api/library")
+    def library() -> dict[str, Any]:
+        return _library_response()
+
+    @application.post("/api/compile")
+    def compile_circuit(request: CompileRequest) -> dict[str, Any]:
+        compilation_id = uuid4().hex[:8]
+        try:
+            return _compile_response(request, compilation_id)
+        except (KeyError, TypeError, ValueError) as error:
+            logger.warning("compile[%s] rejected error=%s", compilation_id, error)
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    frontend = Path(__file__).with_name("frontend")
+    application.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
+    return application
+
+
+app = create_app()
+
+
+def run() -> None:
+    """Run the development server."""
+    _configure_logging()
+    uvicorn.run("asweb.app:app", host="127.0.0.1", port=8000, reload=True, log_config=None)

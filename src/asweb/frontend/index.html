@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
-<link rel="stylesheet" href="./styles.css?v=9">
+<link rel="stylesheet" href="./styles.css?v=11">
 </head>
 
 <body>
@@ -30,18 +30,7 @@
     </nav>
     <section class="edit-only" aria-labelledby="componentsHeading">
         <h2 id="componentsHeading">Components</h2>
-        <div class="button-grid">
-            <button type="button" data-tool="resistor">Resistor</button>
-            <button type="button" data-tool="capacitor">Capacitor</button>
-            <button type="button" data-tool="inductor">Inductor</button>
-            <button type="button" data-tool="diode">Diode</button>
-            <button type="button" data-tool="voltage-source">V Source</button>
-            <button type="button" data-tool="current-source">I Source</button>
-            <button type="button" data-tool="npn-bjt">NPN</button>
-            <button type="button" data-tool="pnp-bjt">PNP</button>
-            <button type="button" data-tool="n-fet">N-type FET</button>
-            <button type="button" data-tool="p-fet">P-type FET</button>
-        </div>
+        <div id="componentTools" class="component-tools"></div>
     </section>
     <section class="edit-only" aria-labelledby="markersHeading">
         <h2 id="markersHeading">Net markers</h2>
@@ -89,6 +78,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=20"></script>
+<script type="module" src="./editor.js?v=29"></script>
 </body>
 </html>

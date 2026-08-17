@@ -4,6 +4,13 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name = "asweb"
+version = "0.1.0"
 authors = [{name = "Tillmann Stübler", email = "ts109@pm.me"}]
-dependencies = ["wrenfold"]
+dependencies = ["antispice", "fastapi", "uvicorn[standard]"]
 requires-python = ">= 3.14"
+
+[project.scripts]
+asweb = "asweb.app:run"
+
+[tool.setuptools.package-data]
+asweb = ["frontend/*"]

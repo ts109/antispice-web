@@ -117,6 +117,21 @@ export function generateNetlist() {
     return components.map(element => ({reference: element.reference, model: element.model, nodes: Object.fromEntries(element.ports.map(nodeId => [circuit.nodes.get(nodeId).port, netForNode(nodeId).name])), parameters: structuredClone(element.parameters)}));
 }
 
+export function generateCompilationElements(resolveModel) {
+    return [...circuit.elements.values()]
+        .sort((a, b) => a.reference.localeCompare(b.reference, undefined, {numeric: true}))
+        .map(element => {
+            const model = resolveModel(element.use);
+            const ports = model?.ports ?? element.electricalPorts ?? [];
+            return {
+                reference: element.reference,
+                use: element.use,
+                nodes: Object.fromEntries(element.ports.map((nodeId, index) => [ports[index], netForNode(nodeId).name])),
+                parameters: structuredClone(element.parameters),
+            };
+        });
+}
+
 export function nodeDegree(nodeId) {
     let result = 0;
     for (const wire of circuit.wires.values()) {
@@ -135,4 +150,23 @@ export function nodePosition(nodeId) {
 export function nodeAnchor(nodeId) {
     const node = circuit.nodes.get(nodeId);
     return {x: node.x, y: node.y, axis: node.axis};
+}
+
+export function detachCircuitNodes(nodeIds) {
+    const removedNodes = new Set(nodeIds);
+    const neighbors = new Set();
+    const removedWires = [];
+
+    for (const wire of [...circuit.wires.values()]) {
+        const removeA = removedNodes.has(wire.a);
+        const removeB = removedNodes.has(wire.b);
+        if (!removeA && !removeB) continue;
+        if (!removeA) neighbors.add(wire.a);
+        if (!removeB) neighbors.add(wire.b);
+        circuit.wires.delete(wire.id);
+        removedWires.push(wire);
+    }
+
+    for (const nodeId of removedNodes) circuit.nodes.delete(nodeId);
+    return {neighbors, removedWires};
 }
