@@ -1,8 +1,12 @@
 """FastAPI backend and static frontend hosting for Antispice Web."""
 
 import base64
+import hashlib
+import json
 import logging
 import os
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -15,6 +19,60 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger("asweb.backend")
+
+
+def _integer_setting(name: str, default: int, *, minimum: int) -> int:
+    """Read and validate one integer environment setting."""
+    source = os.environ.get(name, str(default))
+    try:
+        value = int(source)
+    except ValueError as error:
+        message = f"{name} must be an integer"
+        raise ValueError(message) from error
+    if value < minimum:
+        message = f"{name} must be at least {minimum}"
+        raise ValueError(message)
+    return value
+
+
+class _CompileCache:
+    """Small thread-safe LRU cache for generated compilation artifacts."""
+
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
+        self._entries: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        """Return and promote an entry when present."""
+        with self._lock:
+            result = self._entries.get(key)
+            if result is not None:
+                self._entries.move_to_end(key)
+            return result
+
+    def put(self, key: str, result: dict[str, Any]) -> None:
+        """Insert an entry and discard the least recently used excess entry."""
+        if self.capacity == 0:
+            return
+        with self._lock:
+            self._entries[key] = result
+            self._entries.move_to_end(key)
+            while len(self._entries) > self.capacity:
+                self._entries.popitem(last=False)
+
+    def clear(self) -> None:
+        """Remove all entries, primarily for isolated tests."""
+        with self._lock:
+            self._entries.clear()
+
+
+class _CompilationBusy(RuntimeError):
+    """All configured compiler slots are occupied."""
+
+
+_compile_cache = _CompileCache(_integer_setting("ASWEB_COMPILE_CACHE_SIZE", 16, minimum=0))
+_compile_slots = threading.BoundedSemaphore(_integer_setting("ASWEB_MAX_CONCURRENT_COMPILES", 2, minimum=1))
 
 
 def _configure_logging() -> None:
@@ -56,6 +114,36 @@ class CompileRequest(BaseModel):
 
     version: int = 1
     elements: list[ElementRequest]
+
+
+def _compile_cache_key(request: CompileRequest) -> str:
+    document = json.dumps(request.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(document.encode()).hexdigest()
+
+
+def _cached_compile_response(request: CompileRequest, compilation_id: str) -> dict[str, Any]:
+    key = _compile_cache_key(request)
+    cached = _compile_cache.get(key)
+    if cached is not None:
+        logger.info("compile[%s] cache hit key=%s", compilation_id, key[:12])
+        return cached
+
+    if not _compile_slots.acquire(blocking=False):
+        logger.warning("compile[%s] rejected because all compiler slots are occupied", compilation_id)
+        raise _CompilationBusy
+    try:
+        # A compilation that held the slot may have populated this key while
+        # this request was entering the endpoint.
+        cached = _compile_cache.get(key)
+        if cached is not None:
+            logger.info("compile[%s] cache hit after admission key=%s", compilation_id, key[:12])
+            return cached
+        logger.info("compile[%s] cache miss key=%s", compilation_id, key[:12])
+        result = _compile_response(request, compilation_id)
+        _compile_cache.put(key, result)
+        return result
+    finally:
+        _compile_slots.release()
 
 
 def _encode_definition(definition: antispice.Definition) -> dict[str, Any]:
@@ -225,7 +313,13 @@ def create_app() -> FastAPI:
     def compile_circuit(request: CompileRequest) -> dict[str, Any]:
         compilation_id = uuid4().hex[:8]
         try:
-            return _compile_response(request, compilation_id)
+            return _cached_compile_response(request, compilation_id)
+        except _CompilationBusy as error:
+            raise HTTPException(
+                status_code=503,
+                detail="all compiler slots are occupied; retry shortly",
+                headers={"Retry-After": "1"},
+            ) from error
         except (KeyError, TypeError, ValueError) as error:
             logger.warning("compile[%s] rejected error=%s", compilation_id, error)
             raise HTTPException(status_code=422, detail=str(error)) from error

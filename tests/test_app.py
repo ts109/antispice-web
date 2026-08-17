@@ -2,8 +2,18 @@
 
 import base64
 import unittest
+from unittest.mock import patch
 
-from asweb.app import CompileRequest, ElementRequest, _compile_response, _library_response, _make_circuit
+from asweb.app import (
+    CompileRequest,
+    ElementRequest,
+    _cached_compile_response,
+    _CompilationBusy,
+    _compile_cache,
+    _compile_response,
+    _library_response,
+    _make_circuit,
+)
 
 
 class CircuitTranslationTest(unittest.TestCase):
@@ -87,6 +97,28 @@ class ApiTest(unittest.TestCase):
 
         self.assertIn('"Q1": {"v_be": 0, "v_bc": 1, "i_forward": 2, "i_reverse": 3}', result["javascript"])
         self.assertIn("evaluate_auxiliaries", result["javascript"])
+
+    def test_identical_compile_requests_use_the_process_cache(self) -> None:
+        """A normalized request is compiled only once while its entry remains cached."""
+        request = CompileRequest(elements=[ElementRequest(reference="R1", use="resistor", nodes={"ref": "0", "p": "out"}, parameters={"resistance": 1_000})])
+        artifact = {"wasm": "cached"}
+        _compile_cache.clear()
+        with patch("asweb.app._compile_response", return_value=artifact) as compile_response:
+            first = _cached_compile_response(request, "first")
+            second = _cached_compile_response(request, "second")
+
+        self.assertIs(first, artifact)
+        self.assertIs(second, artifact)
+        compile_response.assert_called_once_with(request, "first")
+
+    def test_busy_compiler_rejects_cache_misses(self) -> None:
+        """A cache miss does not queue unbounded CPU work."""
+        request = CompileRequest(elements=[])
+        _compile_cache.clear()
+        with patch("asweb.app._compile_slots") as slots:
+            slots.acquire.return_value = False
+            with self.assertRaises(_CompilationBusy):
+                _cached_compile_response(request, "busy")
 
 
 if __name__ == "__main__":
