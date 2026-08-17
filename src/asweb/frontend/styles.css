@@ -132,7 +132,9 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
 #statusStrip > * {display: flex; align-items: center; padding: 0 12px; border-right: 2px solid #555; white-space: nowrap;}
 #statusMode {min-width: 110px; background: var(--acid); color: var(--ink); font-family: var(--display); font-size: 16px; letter-spacing: .08em;}
 #statusStrip output {margin-left: 6px; color: var(--acid); font-weight: 900;}
-#statusState {margin-left: auto; border-right: 0; background: var(--blue); color: var(--white); font-family: var(--display); font-size: 14px; letter-spacing: .08em;}
+#licenseNotice {margin-left: auto; color: #aaa; font-size: 9px; text-decoration: none;}
+#licenseNotice:hover {color: var(--acid);}
+#statusState {border-right: 0; background: var(--blue); color: var(--white); font-family: var(--display); font-size: 14px; letter-spacing: .08em;}
 
 @media (max-width: 1100px) {body {grid-template-columns: 180px minmax(0, 1fr) 180px 220px;} #toolbar {padding-inline: 12px;} .button-grid {grid-template-columns: 1fr;}}
 @media (max-width: 760px) {body {grid-template-columns: 160px minmax(0, 1fr);} #toolbar {min-width: 0;} #circuitLists, #properties {display: none;} #toolbar h1 {font-size: 24px;}}

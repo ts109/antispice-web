@@ -60,6 +60,7 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(resistor["auxiliaries"], {})
         self.assertEqual(_library_response()["definitions"]["bjt-ebers-moll"]["ports"], ["E", "B", "C"])
         self.assertEqual(_library_response()["definitions"]["fet-shichman-hodges"]["ports"], ["S", "G", "D"])
+        self.assertTrue({"1n4007", "2n7000", "bs170", "bc547", "bc548", "bc549"} <= _library_response()["definitions"].keys())
 
     def test_compile_returns_wasm_and_wrapper(self) -> None:
         """A valid request produces executable artifacts and metadata."""
