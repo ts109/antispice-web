@@ -8,6 +8,52 @@ export const circuit = {
 
 const nextIds = {element: 1, marker: 1, node: 1, wire: 1, waypoint: 1, net: 1};
 
+export function serializeCircuit() {
+    return {
+        version: 1,
+        elements: structuredClone([...circuit.elements.values()]),
+        markers: structuredClone([...circuit.markers.values()]),
+        nodes: structuredClone([...circuit.nodes.values()]),
+        wires: structuredClone([...circuit.wires.values()]),
+        nets: [...circuit.nets.values()].map(net => ({...structuredClone(net), members: [...net.members]})),
+    };
+}
+
+export function replaceCircuit(snapshot = {}) {
+    const collections = ["elements", "markers", "nodes", "wires", "nets"];
+    if (snapshot.version !== 1 || collections.some(name => !Array.isArray(snapshot[name]))) {
+        throw new TypeError("Unsupported or malformed schematic data");
+    }
+    const makeMap = (values, kind, transform = value => value) => {
+        const result = new Map();
+        for (const source of values) {
+            const id = Number(source?.id);
+            if (!Number.isSafeInteger(id) || id < 1 || result.has(id)) throw new TypeError(`Invalid ${kind} identifier`);
+            const value = transform(structuredClone(source));
+            result.set(id, withImmutableId(value, id));
+        }
+        return result;
+    };
+    const elements = makeMap(snapshot.elements, "element");
+    const markers = makeMap(snapshot.markers, "marker");
+    const nodes = makeMap(snapshot.nodes, "node");
+    const wires = makeMap(snapshot.wires, "wire");
+    const nets = makeMap(snapshot.nets, "net", net => ({...net, members: new Set(net.members)}));
+    for (const wire of wires.values()) {
+        if (!nodes.has(wire.a) || !nodes.has(wire.b) || !Array.isArray(wire.waypoints)) throw new TypeError("Wire references missing nodes");
+    }
+    circuit.elements = elements;
+    circuit.markers = markers;
+    circuit.nodes = nodes;
+    circuit.wires = wires;
+    circuit.nets = nets;
+    for (const kind of collections) {
+        const singular = kind.slice(0, -1);
+        nextIds[singular] = Math.max(0, ...circuit[kind].keys()) + 1;
+    }
+    nextIds.waypoint = Math.max(0, ...[...wires.values()].flatMap(wire => wire.waypoints.map(point => Number(point.id) || 0))) + 1;
+}
+
 export function takeId(kind) {
     return nextIds[kind]++;
 }

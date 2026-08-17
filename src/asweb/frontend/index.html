@@ -3,13 +3,25 @@
 <head>
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
-<link rel="stylesheet" href="./styles.css?v=14">
+<link rel="stylesheet" href="./styles.css?v=15">
 </head>
 
 <body>
 
 <aside id="toolbar" aria-label="Editor controls">
     <h1><span>ANTISPICE</span><em>WEB</em></h1>
+    <section id="schematicControls" aria-labelledby="schematicHeading">
+        <h2 id="schematicHeading">Schematic</h2>
+        <label class="visually-hidden" for="schematicName">Schematic name</label>
+        <input id="schematicName" type="text" autocomplete="off" aria-label="Schematic name">
+        <div class="button-grid">
+            <button id="newSchematic" type="button">New</button>
+            <button id="saveSchematic" type="button">Save</button>
+        </div>
+        <label class="visually-hidden" for="savedSchematics">Saved schematics</label>
+        <select id="savedSchematics" aria-label="Saved schematics"></select>
+        <button id="loadSchematic" type="button">Load selected</button>
+    </section>
     <nav aria-labelledby="modeHeading">
         <h2 id="modeHeading">Mode</h2>
         <div class="mode-switch" role="group" aria-label="Editor mode">
@@ -86,6 +98,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=34"></script>
+<script type="module" src="./editor.js?v=35"></script>
 </body>
 </html>

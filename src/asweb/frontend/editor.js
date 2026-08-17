@@ -1,7 +1,7 @@
 import {availableDefinitions, compileCircuit, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=1";
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=15";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
-import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, takeId, withImmutableId} from "./circuit.js?v=14";
+import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
 import {TransientPlot} from "./plot.js?v=3";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -10,6 +10,7 @@ function rebuildNets() {
     rebuildCircuitNets();
     renderLists();
     updateStatus();
+    scheduleSchematicSave();
 }
 
 const svg = document.querySelector("#editor");
@@ -32,6 +33,123 @@ const statusNets = document.querySelector("#statusNets");
 const statusWires = document.querySelector("#statusWires");
 const statusState = document.querySelector("#statusState");
 const transientPlot = new TransientPlot(document.querySelector("#transientPlot"));
+const schematicName = document.querySelector("#schematicName");
+const savedSchematics = document.querySelector("#savedSchematics");
+const newSchematicButton = document.querySelector("#newSchematic");
+const saveSchematicButton = document.querySelector("#saveSchematic");
+const loadSchematicButton = document.querySelector("#loadSchematic");
+
+const SCHEMATIC_STORAGE_KEY = "antispice-web.schematics.v1";
+let schematicStore = readSchematicStore();
+let saveTimer = null;
+
+function timestampName(date = new Date()) {
+    const timestamp = date.toLocaleString("sv-SE", {hour12: false}).replace("T", " ");
+    return `Schematic · ${timestamp}`;
+}
+
+function emptyCircuitSnapshot() {
+    return {version: 1, elements: [], markers: [], nodes: [], wires: [], nets: []};
+}
+
+function createSchematicRecord(snapshot = emptyCircuitSnapshot()) {
+    const now = new Date();
+    const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return {id, name: timestampName(now), createdAt: now.toISOString(), updatedAt: now.toISOString(), circuit: snapshot};
+}
+
+function readSchematicStore() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(SCHEMATIC_STORAGE_KEY));
+        if (parsed?.version === 1 && Array.isArray(parsed.schematics)) {
+            const active = parsed.schematics.some(record => record.id === parsed.activeId) ? parsed.activeId : parsed.schematics[0]?.id;
+            if (active) return {...parsed, activeId: active};
+        }
+    } catch {
+        // A corrupt or unavailable local store must not prevent the editor loading.
+    }
+    const record = createSchematicRecord();
+    return {version: 1, activeId: record.id, schematics: [record]};
+}
+
+function activeSchematic() {
+    return schematicStore.schematics.find(record => record.id === schematicStore.activeId);
+}
+
+function writeSchematicStore() {
+    try {
+        localStorage.setItem(SCHEMATIC_STORAGE_KEY, JSON.stringify(schematicStore));
+        statusState.textContent = "SAVED";
+    } catch {
+        statusState.textContent = "SAVE ERROR";
+    }
+}
+
+function renderSchematicControls() {
+    const active = activeSchematic();
+    schematicName.value = active?.name ?? "";
+    savedSchematics.replaceChildren();
+    for (const record of [...schematicStore.schematics].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+        const option = document.createElement("option");
+        option.value = record.id;
+        option.textContent = record.name;
+        option.selected = record.id === schematicStore.activeId;
+        savedSchematics.append(option);
+    }
+    loadSchematicButton.disabled = !application.libraryReady || !savedSchematics.value;
+}
+
+function saveActiveSchematic() {
+    if (!application.libraryReady) return;
+    const record = activeSchematic();
+    if (!record) return;
+    record.circuit = serializeCircuit();
+    record.updatedAt = new Date().toISOString();
+    writeSchematicStore();
+    renderSchematicControls();
+}
+
+function scheduleSchematicSave() {
+    if (!application?.libraryReady) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+        saveTimer = null;
+        saveActiveSchematic();
+    }, 250);
+}
+
+function displayCircuitSnapshot(snapshot) {
+    cancelCurrentOperation();
+    selected = null;
+    replaceCircuit(snapshot);
+    rebuildCircuitNets();
+    elementLayer.replaceChildren();
+    wireLayer.replaceChildren();
+    junctionLayer.replaceChildren();
+    overlayLayer.replaceChildren();
+    for (const element of circuit.elements.values()) {
+        element.use ??= element.model;
+        element.electricalPorts ??= resolveModel(element.use)?.ports ?? library[element.model]?.ports.map(port => port.name) ?? [];
+        renderElement(element);
+    }
+    renderAllMarkers();
+    renderAllJunctions();
+    renderAllWires();
+    renderLists();
+    renderProperties();
+    updateStatus();
+}
+
+function loadStoredSchematic(id) {
+    const record = schematicStore.schematics.find(candidate => candidate.id === id);
+    if (!record) return;
+    if (application.mode !== "edit") setMode("edit");
+    schematicStore.activeId = record.id;
+    displayCircuitSnapshot(record.circuit);
+    record.updatedAt = new Date().toISOString();
+    writeSchematicStore();
+    renderSchematicControls();
+}
 
 
 // ============================================================================
@@ -371,17 +489,59 @@ for (const button of document.querySelectorAll("#toolbar [data-mode]")) {
     button.addEventListener("click", () => setMode(button.dataset.mode));
 }
 
+newSchematicButton.disabled = true;
+saveSchematicButton.disabled = true;
+loadSchematicButton.disabled = true;
+writeSchematicStore();
+renderSchematicControls();
+
+newSchematicButton.addEventListener("click", () => {
+    saveActiveSchematic();
+    const record = createSchematicRecord();
+    schematicStore.schematics.push(record);
+    schematicStore.activeId = record.id;
+    displayCircuitSnapshot(record.circuit);
+    writeSchematicStore();
+    renderSchematicControls();
+});
+
+saveSchematicButton.addEventListener("click", () => saveActiveSchematic());
+loadSchematicButton.addEventListener("click", () => {
+    const target = savedSchematics.value;
+    saveActiveSchematic();
+    loadStoredSchematic(target);
+});
+
+schematicName.addEventListener("input", () => {
+    const record = activeSchematic();
+    if (!record) return;
+    record.name = schematicName.value;
+    record.updatedAt = new Date().toISOString();
+    writeSchematicStore();
+    const option = [...savedSchematics.options].find(candidate => candidate.value === record.id);
+    if (option) option.textContent = record.name;
+});
+
+propertyContent.addEventListener("input", () => scheduleSchematicSave());
+propertyContent.addEventListener("change", () => scheduleSchematicSave());
+window.addEventListener("beforeunload", () => saveActiveSchematic());
+
 
 // Initial/default mode.
 setMode("edit");
 loadLibrary().then(() => {
     application.libraryReady = true;
     rebuildComponentTools();
-    for (const element of circuit.elements.values()) {
-        element.use ??= element.model;
-        element.electricalPorts ??= resolveModel(element.use)?.ports ?? library[element.model].ports.map(port => port.name);
+    try {
+        displayCircuitSnapshot(activeSchematic().circuit);
+    } catch {
+        activeSchematic().circuit = emptyCircuitSnapshot();
+        displayCircuitSnapshot(activeSchematic().circuit);
+        writeSchematicStore();
     }
-    renderProperties();
+    newSchematicButton.disabled = false;
+    saveSchematicButton.disabled = false;
+    renderSchematicControls();
 }).catch(error => {
     application.libraryError = error.message;
     propertyContent.textContent = error.message;
@@ -544,6 +704,7 @@ window.addEventListener("pointerup", () => {
         draggingMarker = null;
         segmentDrag = null;
         junctionDrag = null;
+        scheduleSchematicSave();
     }
 );
 
@@ -1325,6 +1486,7 @@ function rotateSelected(degrees) {
     updateTerminalNodes(object);
     selected.kind === "element" ? renderElement(object) : renderMarker(object);
     renderAllWires();
+    scheduleSchematicSave();
 }
 
 
@@ -1817,6 +1979,7 @@ function deleteSelected() {
     renderAllJunctions();
     renderAllWires();
     renderProperties();
+    scheduleSchematicSave();
 }
 
 

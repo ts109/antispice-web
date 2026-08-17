@@ -44,6 +44,30 @@ if (modelFamily("resistor") !== null) process.exit(3);
 """
         subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
 
+    def test_circuit_snapshot_round_trip_restores_sets_and_id_counters(self) -> None:
+        """Saved editor data can be loaded before allocating collision-free IDs."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend persistence"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/circuit.js"
+        source = """
+const {circuit, replaceCircuit, serializeCircuit, takeId} = await import(process.argv[1]);
+replaceCircuit({
+  version: 1,
+  elements: [{id: 4, model: "resistor", use: "resistor", ports: [8, 9], parameters: {resistance: 1000}}],
+  markers: [],
+  nodes: [{id: 8, kind: "terminal"}, {id: 9, kind: "terminal"}],
+  wires: [{id: 3, a: 8, b: 9, waypoints: [{id: 12, x: 10, y: 20}], points: []}],
+  nets: [{id: 6, name: "OUT", members: [8, 9]}],
+});
+if (!(circuit.nets.get(6).members instanceof Set)) process.exit(1);
+const snapshot = serializeCircuit();
+if (snapshot.nets[0].name !== "OUT" || snapshot.nets[0].members.length !== 2) process.exit(2);
+if (takeId("element") !== 5 || takeId("node") !== 10 || takeId("wire") !== 4 || takeId("waypoint") !== 13) process.exit(3);
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
 
 if __name__ == "__main__":
     unittest.main()
