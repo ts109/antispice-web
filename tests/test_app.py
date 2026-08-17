@@ -70,7 +70,7 @@ class ApiTest(unittest.TestCase):
         self.assertGreater(result["stateSize"], 0)
         log = "\n".join(captured.output)
         self.assertIn("compile[test-compile] stage=circuit flattening completed", log)
-        self.assertIn("compile[test-compile] stage=symbolic Newton/LU transpilation completed", log)
+        self.assertIn("compile[test-compile] stage=residual/Jacobian transpilation completed", log)
         self.assertIn("compile[test-compile] completed", log)
 
     def test_compile_reports_core_validation_errors(self) -> None:

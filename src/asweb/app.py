@@ -143,10 +143,15 @@ def _compile_response(request: CompileRequest, compilation_id: str | None = None
         2 * state_size,
     )
     step = _run_compile_stage(compilation_id, "Radau discretization", lambda: antispice.discretize_radau_iia(system))
-    function = _run_compile_stage(compilation_id, "symbolic Newton/LU transpilation", lambda: antispice.transpile_radau_newton_step(step))
+    function = _run_compile_stage(compilation_id, "residual/Jacobian transpilation", lambda: antispice.transpile_radau_evaluator(step))
+    stationary = _run_compile_stage(compilation_id, "stationary-state transpilation", lambda: antispice.transpile_stationary_evaluator(system))
     memory = antispice.radau_memory_layout(system)
     required_pages = max(1, (memory.byte_length + 65_535) // 65_536)
-    wasm = _run_compile_stage(compilation_id, "WebAssembly emission", lambda: antispice.WasmGenerator(memory_pages=required_pages).generate(function))
+    wasm = _run_compile_stage(
+        compilation_id,
+        "WebAssembly emission",
+        lambda: antispice.WasmGenerator(memory_pages=required_pages).generate((function, stationary, antispice.dense_lu_solve_function())),
+    )
     javascript = _run_compile_stage(compilation_id, "JavaScript wrapper generation", lambda: antispice.generate_javascript_radau_wrapper(system))
     logger.info(
         "compile[%s] completed duration=%.3fs wasm_bytes=%d javascript_bytes=%d",

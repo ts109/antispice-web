@@ -76,6 +76,12 @@ body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, 
 .property label {display: block; margin-bottom: 5px; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;}
 .property input {width: 100%; padding: 8px 9px; border: 2px solid var(--ink); border-radius: 0; background: var(--white); color: var(--ink);}
 .property input[aria-invalid] {border-color: var(--red); background: #ffd5d0; box-shadow: 3px 3px 0 var(--red);}
+.transient-controls form {padding: 12px; border: 3px solid var(--ink); background: var(--acid); box-shadow: 5px 5px 0 var(--ink);}
+.transient-controls form button {width: 100%; min-height: 40px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 0; background: var(--blue); color: var(--white); font-weight: 900; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); text-transform: uppercase;}
+.transient-controls form button:hover:not(:disabled) {background: var(--red);}
+.transient-controls form button:disabled {background: #c8c8bd; color: #666; cursor: not-allowed; box-shadow: 2px 2px 0 #666;}
+.transient-result {margin: 14px 0 0; padding: 9px; border-left: 5px solid var(--blue); background: #ecebe5; font-size: 11px; line-height: 1.4;}
+.transient-result[data-state="error"] {border-color: var(--red); background: #ffd5d0;}
 .value-with-unit {display: flex; align-items: center; gap: 8px;}
 .value-with-unit input {min-width: 0;}
 .unit {min-width: 20px; color: var(--ink); font-size: 13px; font-weight: 900; white-space: nowrap;}

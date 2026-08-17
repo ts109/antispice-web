@@ -50,7 +50,22 @@ let junctionDrag = null;
 let viewport = {x: 0, y: 0, width: 0, height: 0};
 let viewportPixels = {width: 0, height: 0};
 const ZOOM_FACTORS = [15, 18, 22, 27, 33, 39, 47, 56, 68, 82, 100, 120, 150, 180, 220, 270, 330, 390];
-const application = {mode: "edit", libraryReady: false, libraryError: "", compilation: {state: "idle", message: ""}, transient: {visibleNets: new Set(), visiblePorts: new Map()}};
+const application = {
+    mode: "edit",
+    libraryReady: false,
+    libraryError: "",
+    compilation: {state: "idle", message: "", solver: null},
+    transient: {
+        visibleNets: new Set(),
+        visiblePorts: new Map(),
+        startTime: "0",
+        endTime: "",
+        stepSize: "",
+        state: "idle",
+        message: "",
+        samples: [],
+    },
+};
 
 function symbolForDefinition(use, overrides = {}) {
     const resolved = resolveModel(use);
@@ -191,13 +206,62 @@ function setMode(mode) {
 }
 
 async function startSimulation() {
-    application.compilation = {state: "working", message: "Compiling circuit…"};
+    application.compilation = {state: "working", message: "Compiling circuit…", solver: null};
+    application.transient.state = "idle";
+    application.transient.message = "";
+    application.transient.samples = [];
     renderProperties();
     try {
         const result = await compileCircuit(generateCompilationElements(resolveModel));
-        application.compilation = {state: "ready", message: `Compiled ${result.stateSize} state variables.`};
+        const solver = await instantiateSolver(result);
+        application.compilation = {state: "ready", message: `Compiled ${result.stateSize} state variables.`, solver};
     } catch (error) {
-        application.compilation = {state: "error", message: error.message};
+        application.compilation = {state: "error", message: error.message, solver: null};
+    }
+    if (application.mode === "simulation") renderProperties();
+}
+
+async function instantiateSolver(compilation) {
+    const bytes = Uint8Array.from(atob(compilation.wasm), character => character.charCodeAt(0));
+    const wrapper = new Blob([compilation.javascript], {type: "text/javascript"});
+    const url = URL.createObjectURL(wrapper);
+    try {
+        const module = await import(url);
+        return await module.AntispiceSolver.instantiate(bytes);
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+function transientConfiguration() {
+    const startTime = Number(application.transient.startTime);
+    const endTime = Number(application.transient.endTime);
+    const stepSize = Number(application.transient.stepSize);
+    if (!application.transient.startTime.trim() || !Number.isFinite(startTime)) throw new Error("Start time must be a finite number.");
+    if (!application.transient.endTime.trim() || !Number.isFinite(endTime)) throw new Error("Choose a finite end time.");
+    if (!(endTime > startTime)) throw new Error("End time must be greater than start time.");
+    if (!application.transient.stepSize.trim() || !Number.isFinite(stepSize) || !(stepSize > 0)) throw new Error("Choose a positive, finite time step.");
+    return {startTime, endTime, stepSize};
+}
+
+async function runTransientSimulation() {
+    const solver = application.compilation.solver;
+    if (!solver || application.transient.state === "running") return;
+    try {
+        const configuration = transientConfiguration();
+        application.transient.state = "running";
+        application.transient.message = "Running transient simulation…";
+        application.transient.samples = [];
+        renderProperties();
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        solver.reset();
+        const operatingPoint = solver.initializeOperatingPoint(configuration.startTime);
+        application.transient.samples = Array.from(solver.integrate(configuration));
+        application.transient.state = "complete";
+        application.transient.message = `Operating point converged in ${operatingPoint.iterations} iterations. Completed ${application.transient.samples.length - 1} time steps.`;
+    } catch (error) {
+        application.transient.state = "error";
+        application.transient.message = error.message;
     }
     if (application.mode === "simulation") renderProperties();
 }
@@ -1508,6 +1572,55 @@ function renderSimulationProperties() {
     explanation.textContent = application.compilation.message || "The schematic is frozen while it is compiled.";
     status.dataset.state = application.compilation.state;
     status.append(explanation);
+
+    const controls = propertySection("Transient analysis", "transient-controls");
+    const form = document.createElement("form");
+    const fields = [
+        ["Start time", "startTime", application.transient.startTime, true],
+        ["End time", "endTime", application.transient.endTime, true],
+        ["Time step", "stepSize", application.transient.stepSize, true],
+    ];
+    for (const [labelText, name, value, required] of fields) {
+        const property = document.createElement("div");
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        property.className = "property";
+        label.htmlFor = `transient-${name}`;
+        label.textContent = labelText;
+        input.id = label.htmlFor;
+        input.name = name;
+        input.type = "number";
+        input.step = "any";
+        input.required = required;
+        input.value = value;
+        input.disabled = application.transient.state === "running";
+        input.addEventListener("input", () => {
+            application.transient[name] = input.value;
+            application.transient.message = "";
+            application.transient.state = "idle";
+            application.transient.samples = [];
+            controls.querySelector(".transient-result")?.remove();
+        });
+        property.append(label, input);
+        form.append(property);
+    }
+    const run = document.createElement("button");
+    run.type = "submit";
+    run.textContent = application.transient.state === "running" ? "Simulating…" : "Run simulation";
+    run.disabled = application.compilation.state !== "ready" || application.transient.state === "running";
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        runTransientSimulation();
+    });
+    form.append(run);
+    controls.append(form);
+    if (application.transient.message) {
+        const result = document.createElement("p");
+        result.className = "transient-result";
+        result.dataset.state = application.transient.state;
+        result.textContent = application.transient.message;
+        controls.append(result);
+    }
 
     const active = propertySection("Displayed signals", "simulation-signals");
     const signals = [];
