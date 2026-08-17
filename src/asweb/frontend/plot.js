@@ -100,7 +100,7 @@ export class TransientPlot {
         const right = 16;
         const top = 22;
         const bottom = 30;
-        const units = ["V", "A"].filter(unit => this.traces.some(trace => trace.unit === unit));
+        const units = [...new Set(this.traces.map(trace => trace.unit))];
         const lanes = new Map();
         const laneHeight = Math.max(1, (this.height - top - bottom) / Math.max(1, units.length));
         units.forEach((unit, index) => lanes.set(unit, {top: top + index * laneHeight, bottom: top + (index + 1) * laneHeight}));
@@ -130,7 +130,7 @@ export class TransientPlot {
 
     ranges(first, end) {
         const ranges = new Map();
-        for (const unit of ["V", "A"]) {
+        for (const unit of new Set(this.traces.map(trace => trace.unit))) {
             let minimum = Infinity;
             let maximum = -Infinity;
             for (const trace of this.traces) {
@@ -199,7 +199,8 @@ export class TransientPlot {
             context.lineWidth = 3;
             context.strokeRect(geometry.left, lane.top, geometry.plotWidth, lane.bottom - lane.top);
             context.fillStyle = "#0a0a0a";
-            context.fillText(unit === "V" ? "VOLT" : "AMP", 8, lane.top + 9);
+            context.textAlign = "left";
+            context.fillText(unit === "V" ? "VOLT" : unit === "A" ? "AMP" : "VALUE", 8, lane.top + 9);
             if (range) {
                 const valueTicks = axisTicks(range.minimum, range.maximum, Math.max(2, Math.floor((lane.bottom - lane.top) / 45)));
                 for (const value of valueTicks.values) {
@@ -395,6 +396,14 @@ function nearestIndex(values, count, target) {
 
 function traceValue(data, trace, sample) {
     if (trace.index !== undefined) return data.states[sample * data.stateSize + trace.index];
+    if (trace.auxiliaryIndex !== undefined) return data.auxiliaries[sample * data.auxiliaryCount + trace.auxiliaryIndex];
+    if (trace.terms) {
+        let value = 0;
+        for (const [index, coefficient] of trace.terms) {
+            if (index !== null) value += coefficient * data.states[sample * data.stateSize + index];
+        }
+        return value;
+    }
     let value = 0;
     for (const index of trace.indices ?? []) value += data.states[sample * data.stateSize + index];
     return value * (trace.coefficient ?? 1);

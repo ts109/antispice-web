@@ -3,7 +3,7 @@ import {compileCircuit} from "./api.js?v=1";
 export function createTransientState() {
     return {
         visibleNets: new Set(),
-        visiblePorts: new Map(),
+        visibleElementSignals: new Map(),
         startTime: "0",
         endTime: "",
         minimumStepSize: "",

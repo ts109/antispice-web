@@ -2,9 +2,9 @@ import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, re
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=15";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
-import {TransientPlot} from "./plot.js?v=3";
+import {TransientPlot} from "./plot.js?v=5";
 import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
-import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=1";
+import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=2";
 
 const NS = "http://www.w3.org/2000/svg";
 window.generateNetlist = generateNetlist;
@@ -260,14 +260,14 @@ function setMode(mode) {
     }
     application.mode = mode;
     application.transient.visibleNets.clear();
-    application.transient.visiblePorts.clear();
+    application.transient.visibleElementSignals.clear();
     document.body.dataset.mode = mode;
     if (mode === "simulation") {
         transientPlot.refreshLayout();
         startSimulation();
     }
-    elementsHeading.textContent = mode === "edit" ? "Elements" : "Port currents";
-    netsHeading.textContent = mode === "edit" ? "Nets" : "Net voltages";
+    elementsHeading.textContent = mode === "edit" ? "Elements" : "Element signals";
+    netsHeading.textContent = mode === "edit" ? "Nets" : "Net potentials";
     propertiesHeading.textContent = mode === "edit" ? "Properties" : "Transient signals";
     cancelCurrentOperation();
     selected = null;
@@ -356,14 +356,14 @@ function toggleNetVoltage(nodeId) {
     refreshTransientPlot();
 }
 
-function togglePortCurrent(element, portName) {
-    if (!application.transient.visiblePorts.has(element.reference)) {
-        application.transient.visiblePorts.set(element.reference, new Set());
+function toggleElementSignal(element, signalName) {
+    if (!application.transient.visibleElementSignals.has(element.reference)) {
+        application.transient.visibleElementSignals.set(element.reference, new Set());
     }
-    const ports = application.transient.visiblePorts.get(element.reference);
-    toggleSet(ports, portName);
-    if (!ports.size) {
-        application.transient.visiblePorts.delete(element.reference);
+    const signals = application.transient.visibleElementSignals.get(element.reference);
+    toggleSet(signals, signalName);
+    if (!signals.size) {
+        application.transient.visibleElementSignals.delete(element.reference);
     }
     renderElement(element);
     renderLists();
@@ -377,16 +377,29 @@ function refreshTransientPlot() {
     if (layout) {
         for (const net of application.transient.visibleNets) {
             const index = layout.potentials[net];
-            if (index !== undefined) traces.push({label: `V(${net})`, unit: "V", index});
+            if (index !== undefined) traces.push({label: `φ(${net})`, unit: "V", index});
         }
-        for (const [reference, ports] of application.transient.visiblePorts) {
+        for (const [reference, signals] of application.transient.visibleElementSignals) {
             const direct = layout.currents[reference] ?? {};
             const element = [...circuit.elements.values()].find(candidate => candidate.reference === reference);
-            for (const port of ports) {
-                if (direct[port] !== undefined) {
-                    traces.push({label: `I(${reference}, ${port})`, unit: "A", index: direct[port]});
-                } else if ((element?.electricalPorts?.[0] ?? resolveModel(element?.use)?.ports[0]) === port) {
-                    traces.push({label: `I(${reference}, ${port})`, unit: "A", indices: Object.values(direct), coefficient: -1});
+            const model = resolveModel(element?.use);
+            const portNodes = new Map((model?.ports ?? []).map((port, index) => [port, netForNode(element.ports[index]).name]));
+            const referencePort = model?.ports[0];
+            for (const signal of signals) {
+                const kind = signal.slice(0, 2);
+                const name = signal.slice(2);
+                if (kind === "I:") {
+                    const index = direct[name];
+                    traces.push(index !== undefined
+                        ? {label: `${reference}.I_${name}`, unit: "A", index}
+                        : {label: `${reference}.I_${name}`, unit: "A", indices: Object.values(direct), coefficient: -1});
+                } else if (kind === "U:") {
+                    const positive = layout.potentials[portNodes.get(name)] ?? null;
+                    const negative = layout.potentials[portNodes.get(referencePort)] ?? null;
+                    traces.push({label: `${reference}.U_${name}`, unit: "V", terms: [[positive, 1], [negative, -1]]});
+                } else if (kind === "A:") {
+                    const index = layout.auxiliaries?.[reference]?.[name];
+                    if (index !== undefined) traces.push({label: `${reference}.${name}`, unit: auxiliaryUnit(name), auxiliaryIndex: index});
                 }
             }
         }
@@ -400,8 +413,14 @@ function netVoltageVisible(nodeId) {
     return netName !== "0" && application.transient.visibleNets.has(netName);
 }
 
-function portCurrentVisible(element, portName) {
-    return application.transient.visiblePorts.get(element.reference)?.has(portName) ?? false;
+function elementSignalVisible(element, signalName) {
+    return application.transient.visibleElementSignals.get(element.reference)?.has(signalName) ?? false;
+}
+
+function auxiliaryUnit(name) {
+    if (/^(v_|voltage)/i.test(name)) return "V";
+    if (/^(i_|current)/i.test(name)) return "A";
+    return "";
 }
 
 
@@ -922,7 +941,7 @@ function renderElement(element) {
         selected?.kind === "element" &&
         selected.id === element.id
     );
-    g.classList.toggle("signal-selected", application.mode === "simulation" && element.ports.some((nodeId, index) => portCurrentVisible(element, element.electricalPorts?.[index] ?? library[element.model].ports[index].name)));
+    g.classList.toggle("signal-selected", application.mode === "simulation" && application.transient.visibleElementSignals.has(element.reference));
 
 
     // --------------------------------------------------
@@ -935,7 +954,10 @@ function renderElement(element) {
         if (!visible)
             return;
 
-        visible.classList.toggle("signal-active", application.mode === "simulation" && portCurrentVisible(element, element.electricalPorts?.[index] ?? library[element.model].ports[index].name));
+        const portName = element.electricalPorts?.[index] ?? library[element.model].ports[index].name;
+        visible.classList.toggle("signal-active", application.mode === "simulation" && (
+            elementSignalVisible(element, `I:${portName}`) || elementSignalVisible(element, `U:${portName}`)
+        ));
         visible.style.display = nodeDegree(nodeId) > 0 ? "none" : "";
     });
 }
@@ -1442,6 +1464,9 @@ function select(object) {
 }
 
 function renderLists() {
+    const expandedElements = new Set(
+        [...elementList.querySelectorAll("details[open][data-reference]")].map(group => group.dataset.reference)
+    );
     elementList.replaceChildren();
     markerList.replaceChildren();
     netList.replaceChildren();
@@ -1455,24 +1480,30 @@ function renderLists() {
             button.addEventListener("click", () => select({kind: "element", id: element.id}));
             elementList.append(button);
         } else {
-            const group = document.createElement("section");
-            const name = document.createElement("div");
+            const group = document.createElement("details");
+            const name = document.createElement("summary");
             const ports = document.createElement("div");
             group.className = "simulation-element";
+            group.dataset.reference = element.reference;
+            group.open = expandedElements.has(element.reference);
             name.className = "simulation-element-name";
-            ports.className = "simulation-ports";
+            ports.className = "simulation-signals";
             name.textContent = `${element.reference} · ${element.use}`;
-            element.ports.forEach((nodeId, index) => {
-                const portName = element.electricalPorts?.[index] ?? library[element.model].ports[index].name;
+            const model = resolveModel(element.use);
+            const choices = [];
+            for (const portName of model?.ports ?? []) choices.push([`I:${portName}`, `I_${portName}`, "current"]);
+            for (const portName of model?.ports.slice(1) ?? []) choices.push([`U:${portName}`, `U_${portName}`, "port voltage"]);
+            for (const auxiliary of Object.keys(model?.auxiliaries ?? {})) choices.push([`A:${auxiliary}`, auxiliary, "auxiliary"]);
+            for (const [signalName, label, kind] of choices) {
                 const button = document.createElement("button");
                 button.type = "button";
-                button.textContent = portName;
-                button.title = `Toggle current at ${element.reference}, port ${portName}`;
+                button.textContent = label;
+                button.title = `Toggle ${kind} ${element.reference}.${label}`;
                 button.setAttribute("aria-label", button.title);
-                button.classList.toggle("active", portCurrentVisible(element, portName));
-                button.addEventListener("click", () => togglePortCurrent(element, portName));
+                button.classList.toggle("active", elementSignalVisible(element, signalName));
+                button.addEventListener("click", () => toggleElementSignal(element, signalName));
                 ports.append(button);
-            });
+            }
             group.append(name, ports);
             elementList.append(group);
         }
@@ -1755,11 +1786,12 @@ function renderSimulationProperties() {
     const active = propertySection("Displayed signals", "simulation-signals");
     const signals = [];
     for (const net of application.transient.visibleNets) {
-        signals.push(`V(${net})`);
+        signals.push(`φ(${net})`);
     }
-    for (const [reference, ports] of application.transient.visiblePorts) {
-        for (const port of ports) {
-            signals.push(`I(${reference}, ${port})`);
+    for (const [reference, elementSignals] of application.transient.visibleElementSignals) {
+        for (const signal of elementSignals) {
+            const [kind, name] = signal.split(":", 2);
+            signals.push(`${reference}.${kind === "A" ? "" : `${kind}_`}${name}`);
         }
     }
     if (!signals.length) {

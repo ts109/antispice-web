@@ -79,6 +79,15 @@ class ApiTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing model parameters"):
             _compile_response(request)
 
+    def test_compile_exposes_canonical_auxiliary_indices(self) -> None:
+        """Model auxiliary names remain available to the generated frontend runtime."""
+        request = CompileRequest(elements=[ElementRequest(reference="Q1", use="2n3904", nodes={"E": "0", "B": "base", "C": "collector"})])
+
+        result = _compile_response(request)
+
+        self.assertIn('"Q1": {"v_be": 0, "v_bc": 1, "i_forward": 2, "i_reverse": 3}', result["javascript"])
+        self.assertIn("evaluate_auxiliaries", result["javascript"])
+
 
 if __name__ == "__main__":
     unittest.main()
