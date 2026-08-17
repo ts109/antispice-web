@@ -180,7 +180,12 @@ const application = {
         visiblePorts: new Map(),
         startTime: "0",
         endTime: "",
-        stepSize: "",
+        minimumStepSize: "",
+        maximumStepSize: "",
+        relativeTolerance: "1e-4",
+        voltageAbsoluteTolerance: "1e-7",
+        currentAbsoluteTolerance: "1e-10",
+        residualTolerance: "1e-10",
         state: "idle",
         message: "",
         result: null,
@@ -364,12 +369,23 @@ async function instantiateSolver(compilation) {
 function transientConfiguration() {
     const startTime = Number(application.transient.startTime);
     const endTime = Number(application.transient.endTime);
-    const stepSize = Number(application.transient.stepSize);
+    const minimumStepSize = Number(application.transient.minimumStepSize);
+    const maximumStepSize = Number(application.transient.maximumStepSize);
+    const relativeTolerance = Number(application.transient.relativeTolerance);
+    const voltageAbsoluteTolerance = Number(application.transient.voltageAbsoluteTolerance);
+    const currentAbsoluteTolerance = Number(application.transient.currentAbsoluteTolerance);
+    const residualTolerance = Number(application.transient.residualTolerance);
     if (!application.transient.startTime.trim() || !Number.isFinite(startTime)) throw new Error("Start time must be a finite number.");
     if (!application.transient.endTime.trim() || !Number.isFinite(endTime)) throw new Error("Choose a finite end time.");
     if (!(endTime > startTime)) throw new Error("End time must be greater than start time.");
-    if (!application.transient.stepSize.trim() || !Number.isFinite(stepSize) || !(stepSize > 0)) throw new Error("Choose a positive, finite time step.");
-    return {startTime, endTime, stepSize};
+    if (!application.transient.minimumStepSize.trim() || !Number.isFinite(minimumStepSize) || !(minimumStepSize > 0)) throw new Error("Choose a positive, finite lower step-size limit.");
+    if (!application.transient.maximumStepSize.trim() || !Number.isFinite(maximumStepSize) || !(maximumStepSize > 0)) throw new Error("Choose a positive, finite upper step-size limit.");
+    if (maximumStepSize < minimumStepSize) throw new Error("The upper step-size limit must not be smaller than the lower limit.");
+    if (!application.transient.relativeTolerance.trim() || !Number.isFinite(relativeTolerance) || !(relativeTolerance > 0)) throw new Error("Relative tolerance must be positive and finite.");
+    if (!application.transient.voltageAbsoluteTolerance.trim() || !Number.isFinite(voltageAbsoluteTolerance) || !(voltageAbsoluteTolerance > 0)) throw new Error("Voltage absolute tolerance must be positive and finite.");
+    if (!application.transient.currentAbsoluteTolerance.trim() || !Number.isFinite(currentAbsoluteTolerance) || !(currentAbsoluteTolerance > 0)) throw new Error("Current absolute tolerance must be positive and finite.");
+    if (!application.transient.residualTolerance.trim() || !Number.isFinite(residualTolerance) || !(residualTolerance > 0)) throw new Error("Newton residual tolerance must be positive and finite.");
+    return {startTime, endTime, minimumStepSize, maximumStepSize, relativeTolerance, voltageAbsoluteTolerance, currentAbsoluteTolerance, residualTolerance};
 }
 
 async function runTransientSimulation() {
@@ -384,12 +400,12 @@ async function runTransientSimulation() {
         renderProperties();
         await new Promise(resolve => requestAnimationFrame(resolve));
         solver.reset();
-        const operatingPoint = solver.initializeOperatingPoint(configuration.startTime);
-        application.transient.result = solver.integrateArrays(configuration);
+        const operatingPoint = solver.initializeOperatingPoint(configuration.startTime, {residualTolerance: configuration.residualTolerance});
+        application.transient.result = solver.integrateAdaptiveArrays(configuration);
         transientPlot.setData(application.transient.result);
         refreshTransientPlot();
         application.transient.state = "complete";
-        application.transient.message = `Operating point converged in ${operatingPoint.iterations} iterations. Completed ${application.transient.result.sampleCount - 1} time steps.`;
+        application.transient.message = `Operating point converged in ${operatingPoint.iterations} iterations. Accepted ${application.transient.result.acceptedSteps} adaptive steps, rejected ${application.transient.result.rejectedSteps}.`;
     } catch (error) {
         application.transient.state = "error";
         application.transient.message = error.message;
@@ -1779,7 +1795,12 @@ function renderSimulationProperties() {
     const fields = [
         ["Start time", "startTime", application.transient.startTime, true],
         ["End time", "endTime", application.transient.endTime, true],
-        ["Time step", "stepSize", application.transient.stepSize, true],
+        ["Minimum step size", "minimumStepSize", application.transient.minimumStepSize, true],
+        ["Maximum step size", "maximumStepSize", application.transient.maximumStepSize, true],
+        ["Relative tolerance", "relativeTolerance", application.transient.relativeTolerance, true],
+        ["Voltage absolute tolerance", "voltageAbsoluteTolerance", application.transient.voltageAbsoluteTolerance, true],
+        ["Current absolute tolerance", "currentAbsoluteTolerance", application.transient.currentAbsoluteTolerance, true],
+        ["Newton residual tolerance", "residualTolerance", application.transient.residualTolerance, true],
     ];
     for (const [labelText, name, value, required] of fields) {
         const property = document.createElement("div");
