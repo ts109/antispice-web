@@ -889,7 +889,8 @@ function renderElement(element) {
 
                         event.stopPropagation();
                         if (application.mode === "simulation") {
-                            togglePortCurrent(element, port.name);
+                            const portName = element.electricalPorts?.[index] ?? port.name;
+                            toggleElementSignal(element, `I:${portName}`);
                             return;
                         }
                         handleNodeClick(nodeId);
