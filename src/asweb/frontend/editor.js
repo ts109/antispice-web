@@ -1,8 +1,10 @@
-import {availableDefinitions, compileCircuit, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=1";
+import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=1";
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=15";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
 import {TransientPlot} from "./plot.js?v=3";
+import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
+import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=1";
 
 const NS = "http://www.w3.org/2000/svg";
 window.generateNetlist = generateNetlist;
@@ -39,46 +41,12 @@ const newSchematicButton = document.querySelector("#newSchematic");
 const saveSchematicButton = document.querySelector("#saveSchematic");
 const loadSchematicButton = document.querySelector("#loadSchematic");
 
-const SCHEMATIC_STORAGE_KEY = "antispice-web.schematics.v1";
-let schematicStore = readSchematicStore();
+const schematicStore = new SchematicStore(localStorage);
 let saveTimer = null;
-
-function timestampName(date = new Date()) {
-    const timestamp = date.toLocaleString("sv-SE", {hour12: false}).replace("T", " ");
-    return `Schematic · ${timestamp}`;
-}
-
-function emptyCircuitSnapshot() {
-    return {version: 1, elements: [], markers: [], nodes: [], wires: [], nets: []};
-}
-
-function createSchematicRecord(snapshot = emptyCircuitSnapshot()) {
-    const now = new Date();
-    const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    return {id, name: timestampName(now), createdAt: now.toISOString(), updatedAt: now.toISOString(), circuit: snapshot};
-}
-
-function readSchematicStore() {
-    try {
-        const parsed = JSON.parse(localStorage.getItem(SCHEMATIC_STORAGE_KEY));
-        if (parsed?.version === 1 && Array.isArray(parsed.schematics)) {
-            const active = parsed.schematics.some(record => record.id === parsed.activeId) ? parsed.activeId : parsed.schematics[0]?.id;
-            if (active) return {...parsed, activeId: active};
-        }
-    } catch {
-        // A corrupt or unavailable local store must not prevent the editor loading.
-    }
-    const record = createSchematicRecord();
-    return {version: 1, activeId: record.id, schematics: [record]};
-}
-
-function activeSchematic() {
-    return schematicStore.schematics.find(record => record.id === schematicStore.activeId);
-}
 
 function writeSchematicStore() {
     try {
-        localStorage.setItem(SCHEMATIC_STORAGE_KEY, JSON.stringify(schematicStore));
+        schematicStore.persist();
         statusState.textContent = "SAVED";
     } catch {
         statusState.textContent = "SAVE ERROR";
@@ -86,14 +54,14 @@ function writeSchematicStore() {
 }
 
 function renderSchematicControls() {
-    const active = activeSchematic();
+    const active = schematicStore.active();
     schematicName.value = active?.name ?? "";
     savedSchematics.replaceChildren();
-    for (const record of [...schematicStore.schematics].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+    for (const record of schematicStore.list()) {
         const option = document.createElement("option");
         option.value = record.id;
         option.textContent = record.name;
-        option.selected = record.id === schematicStore.activeId;
+        option.selected = record.id === active?.id;
         savedSchematics.append(option);
     }
     loadSchematicButton.disabled = !application.libraryReady || !savedSchematics.value;
@@ -101,10 +69,7 @@ function renderSchematicControls() {
 
 function saveActiveSchematic() {
     if (!application.libraryReady) return;
-    const record = activeSchematic();
-    if (!record) return;
-    record.circuit = serializeCircuit();
-    record.updatedAt = new Date().toISOString();
+    if (!schematicStore.save(serializeCircuit())) return;
     writeSchematicStore();
     renderSchematicControls();
 }
@@ -141,12 +106,10 @@ function displayCircuitSnapshot(snapshot) {
 }
 
 function loadStoredSchematic(id) {
-    const record = schematicStore.schematics.find(candidate => candidate.id === id);
+    const record = schematicStore.select(id);
     if (!record) return;
     if (application.mode !== "edit") setMode("edit");
-    schematicStore.activeId = record.id;
     displayCircuitSnapshot(record.circuit);
-    record.updatedAt = new Date().toISOString();
     writeSchematicStore();
     renderSchematicControls();
 }
@@ -175,21 +138,7 @@ const application = {
     libraryReady: false,
     libraryError: "",
     compilation: {state: "idle", message: "", solver: null},
-    transient: {
-        visibleNets: new Set(),
-        visiblePorts: new Map(),
-        startTime: "0",
-        endTime: "",
-        minimumStepSize: "",
-        maximumStepSize: "",
-        relativeTolerance: "1e-4",
-        voltageAbsoluteTolerance: "1e-7",
-        currentAbsoluteTolerance: "1e-10",
-        residualTolerance: "1e-10",
-        state: "idle",
-        message: "",
-        result: null,
-    },
+    transient: createTransientState(),
 };
 
 function symbolForDefinition(use, overrides = {}) {
@@ -341,9 +290,8 @@ async function startSimulation() {
     transientPlot.setData(null);
     renderProperties();
     try {
-        const result = await compileCircuit(generateCompilationElements(resolveModel));
-        const runtime = await instantiateSolver(result);
-        application.compilation = {state: "ready", message: `Compiled ${result.stateSize} state variables.`, ...runtime};
+        const runtime = await compileSimulation(generateCompilationElements(resolveModel));
+        application.compilation = {state: "ready", message: `Compiled ${runtime.stateSize} state variables.`, ...runtime};
         refreshTransientPlot();
     } catch (error) {
         application.compilation = {state: "error", message: error.message, solver: null};
@@ -351,57 +299,19 @@ async function startSimulation() {
     if (application.mode === "simulation") renderProperties();
 }
 
-async function instantiateSolver(compilation) {
-    const bytes = Uint8Array.from(atob(compilation.wasm), character => character.charCodeAt(0));
-    const wrapper = new Blob([compilation.javascript], {type: "text/javascript"});
-    const url = URL.createObjectURL(wrapper);
-    try {
-        const module = await import(url);
-        return {
-            solver: await module.AntispiceSolver.instantiate(bytes),
-            layout: module.circuitLayout,
-        };
-    } finally {
-        URL.revokeObjectURL(url);
-    }
-}
-
-function transientConfiguration() {
-    const startTime = Number(application.transient.startTime);
-    const endTime = Number(application.transient.endTime);
-    const minimumStepSize = Number(application.transient.minimumStepSize);
-    const maximumStepSize = Number(application.transient.maximumStepSize);
-    const relativeTolerance = Number(application.transient.relativeTolerance);
-    const voltageAbsoluteTolerance = Number(application.transient.voltageAbsoluteTolerance);
-    const currentAbsoluteTolerance = Number(application.transient.currentAbsoluteTolerance);
-    const residualTolerance = Number(application.transient.residualTolerance);
-    if (!application.transient.startTime.trim() || !Number.isFinite(startTime)) throw new Error("Start time must be a finite number.");
-    if (!application.transient.endTime.trim() || !Number.isFinite(endTime)) throw new Error("Choose a finite end time.");
-    if (!(endTime > startTime)) throw new Error("End time must be greater than start time.");
-    if (!application.transient.minimumStepSize.trim() || !Number.isFinite(minimumStepSize) || !(minimumStepSize > 0)) throw new Error("Choose a positive, finite lower step-size limit.");
-    if (!application.transient.maximumStepSize.trim() || !Number.isFinite(maximumStepSize) || !(maximumStepSize > 0)) throw new Error("Choose a positive, finite upper step-size limit.");
-    if (maximumStepSize < minimumStepSize) throw new Error("The upper step-size limit must not be smaller than the lower limit.");
-    if (!application.transient.relativeTolerance.trim() || !Number.isFinite(relativeTolerance) || !(relativeTolerance > 0)) throw new Error("Relative tolerance must be positive and finite.");
-    if (!application.transient.voltageAbsoluteTolerance.trim() || !Number.isFinite(voltageAbsoluteTolerance) || !(voltageAbsoluteTolerance > 0)) throw new Error("Voltage absolute tolerance must be positive and finite.");
-    if (!application.transient.currentAbsoluteTolerance.trim() || !Number.isFinite(currentAbsoluteTolerance) || !(currentAbsoluteTolerance > 0)) throw new Error("Current absolute tolerance must be positive and finite.");
-    if (!application.transient.residualTolerance.trim() || !Number.isFinite(residualTolerance) || !(residualTolerance > 0)) throw new Error("Newton residual tolerance must be positive and finite.");
-    return {startTime, endTime, minimumStepSize, maximumStepSize, relativeTolerance, voltageAbsoluteTolerance, currentAbsoluteTolerance, residualTolerance};
-}
-
 async function runTransientSimulation() {
     const solver = application.compilation.solver;
     if (!solver || application.transient.state === "running") return;
     try {
-        const configuration = transientConfiguration();
+        const configuration = transientConfiguration(application.transient);
         application.transient.state = "running";
         application.transient.message = "Running transient simulation…";
         application.transient.result = null;
         transientPlot.setData(null);
         renderProperties();
         await new Promise(resolve => requestAnimationFrame(resolve));
-        solver.reset();
-        const operatingPoint = solver.initializeOperatingPoint(configuration.startTime, {residualTolerance: configuration.residualTolerance});
-        application.transient.result = solver.integrateAdaptiveArrays(configuration);
+        const {operatingPoint, result} = runTransient(solver, configuration);
+        application.transient.result = result;
         transientPlot.setData(application.transient.result);
         refreshTransientPlot();
         application.transient.state = "complete";
@@ -513,9 +423,7 @@ renderSchematicControls();
 
 newSchematicButton.addEventListener("click", () => {
     saveActiveSchematic();
-    const record = createSchematicRecord();
-    schematicStore.schematics.push(record);
-    schematicStore.activeId = record.id;
+    const record = schematicStore.create();
     displayCircuitSnapshot(record.circuit);
     writeSchematicStore();
     renderSchematicControls();
@@ -529,10 +437,8 @@ loadSchematicButton.addEventListener("click", () => {
 });
 
 schematicName.addEventListener("input", () => {
-    const record = activeSchematic();
+    const record = schematicStore.rename(schematicName.value);
     if (!record) return;
-    record.name = schematicName.value;
-    record.updatedAt = new Date().toISOString();
     writeSchematicStore();
     const option = [...savedSchematics.options].find(candidate => candidate.value === record.id);
     if (option) option.textContent = record.name;
@@ -548,11 +454,12 @@ setMode("edit");
 loadLibrary().then(() => {
     application.libraryReady = true;
     rebuildComponentTools();
+    const active = schematicStore.active();
     try {
-        displayCircuitSnapshot(activeSchematic().circuit);
+        displayCircuitSnapshot(active.circuit);
     } catch {
-        activeSchematic().circuit = emptyCircuitSnapshot();
-        displayCircuitSnapshot(activeSchematic().circuit);
+        active.circuit = emptyCircuitSnapshot();
+        displayCircuitSnapshot(active.circuit);
         writeSchematicStore();
     }
     newSchematicButton.disabled = false;

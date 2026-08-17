@@ -68,6 +68,50 @@ if (takeId("element") !== 5 || takeId("node") !== 10 || takeId("wire") !== 4 || 
 """
         subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
 
+    def test_schematic_store_restores_active_records(self) -> None:
+        """Persistence records remain independent from DOM rendering."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend persistence"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/schematics.js"
+        source = """
+const {SchematicStore} = await import(process.argv[1]);
+const values = new Map();
+const storage = {getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value)};
+const first = new SchematicStore(storage, "test");
+const original = first.active();
+first.rename("AMPLIFIER");
+first.save({version: 1, elements: [{id: 1}], markers: [], nodes: [], wires: [], nets: []});
+const second = first.create();
+first.persist();
+const restored = new SchematicStore(storage, "test");
+if (restored.active().id !== second.id || restored.list().length !== 2) process.exit(1);
+if (restored.select(original.id).name !== "AMPLIFIER") process.exit(2);
+if (restored.active().circuit.elements[0].id !== 1) process.exit(3);
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
+    def test_simulation_configuration_is_owned_by_simulation_module(self) -> None:
+        """Simulation validation converts the UI's text fields in one place."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend simulation"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/simulation.js"
+        source = """
+const {createTransientState, transientConfiguration} = await import(process.argv[1]);
+const state = createTransientState();
+Object.assign(state, {endTime: "1", minimumStepSize: "1e-6", maximumStepSize: "1e-2"});
+const configuration = transientConfiguration(state);
+if (configuration.minimumStepSize !== 1e-6 || configuration.maximumStepSize !== 1e-2) process.exit(1);
+state.maximumStepSize = "1e-7";
+try { transientConfiguration(state); process.exit(2); } catch (error) {
+  if (!error.message.includes("must not be smaller")) process.exit(3);
+}
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
 
 if __name__ == "__main__":
     unittest.main()
