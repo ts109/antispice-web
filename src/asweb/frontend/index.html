@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
-<link rel="stylesheet" href="./styles.css?v=12">
+<link rel="stylesheet" href="./styles.css?v=14">
 </head>
 
 <body>
@@ -47,6 +47,14 @@
         <g id="elementLayer"></g>
         <g id="overlayLayer"></g>
     </svg>
+    <section id="transientPlot" aria-label="Transient simulation plot">
+        <header><strong>TRANSIENT / 0001</strong><div class="plot-legend"></div><span>WHEEL ZOOM · DRAG PAN · DOUBLE-CLICK FIT</span></header>
+        <div class="plot-canvas-stack">
+            <canvas aria-hidden="true"></canvas>
+            <canvas aria-hidden="true"></canvas>
+            <canvas tabindex="0" aria-label="Interactive transient signal plot"></canvas>
+        </div>
+    </section>
 </main>
 
 <aside id="circuitLists" aria-label="Circuit objects">
@@ -78,6 +86,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=31"></script>
+<script type="module" src="./editor.js?v=34"></script>
 </body>
 </html>

@@ -40,6 +40,17 @@ button:focus-visible, input:focus-visible {outline: 4px solid var(--blue); outli
 #workspace::after {position: absolute; right: 3%; bottom: 1%; z-index: 2; color: var(--ink); font-family: var(--display); font-size: clamp(90px, 17vw, 260px); letter-spacing: -.04em; line-height: .75; opacity: .045; pointer-events: none; content: "EDIT";}
 body[data-mode="simulation"] #workspace::after {color: var(--red); content: "SIMULATE";}
 #editor {position: relative; z-index: 1; display: block; width: 100%; height: 100%; background-color: var(--paper); background-image: linear-gradient(#dedbd1 1px, transparent 1px), linear-gradient(90deg, #dedbd1 1px, transparent 1px); background-position: var(--grid-x, 0) var(--grid-y, 0); background-size: var(--grid-size, 20px) var(--grid-size, 20px);}
+#transientPlot {display: none; min-width: 0; min-height: 0; border-top: 6px solid var(--ink); background: var(--ink);}
+#transientPlot header {display: flex; align-items: center; min-height: 42px; gap: 14px; padding: 6px 10px; color: var(--white); overflow: hidden;}
+#transientPlot header > strong {flex: none; padding: 5px 7px; background: var(--acid); color: var(--ink); font-family: var(--display); font-size: 17px; letter-spacing: .07em;}
+#transientPlot header > span {margin-left: auto; color: #aaa; font-size: 9px; white-space: nowrap;}
+.plot-legend {display: flex; min-width: 0; gap: 7px; overflow-x: auto;}
+.plot-legend span {display: flex; align-items: center; flex: none; gap: 5px; padding: 4px 6px; border: 2px solid #777; font-size: 10px; font-weight: 900; white-space: nowrap;}
+.plot-legend i {display: inline-block; width: 11px; height: 11px; border: 1px solid var(--white);}
+.plot-canvas-stack {position: relative; min-width: 0; min-height: 0; background: var(--paper); cursor: crosshair; touch-action: none;}
+.plot-canvas-stack canvas {position: absolute; inset: 0; display: block; width: 100%; height: 100%;}
+body[data-mode="simulation"] #workspace {display: grid; grid-template-rows: minmax(170px, 44%) minmax(230px, 56%);}
+body[data-mode="simulation"] #transientPlot {display: grid; grid-template-rows: auto minmax(0, 1fr);}
 body[data-mode="simulation"] #editor {background-image: linear-gradient(#cce9ed 1px, transparent 1px), linear-gradient(90deg, #cce9ed 1px, transparent 1px);}
 body[data-mode="simulation"] #workspace {box-shadow: inset 0 0 0 5px var(--blue);}
 body[data-mode="simulation"] .element {cursor: default;}
@@ -82,6 +93,7 @@ body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, 
 .transient-controls form button:disabled {background: #c8c8bd; color: #666; cursor: not-allowed; box-shadow: 2px 2px 0 #666;}
 .transient-result {margin: 14px 0 0; padding: 9px; border-left: 5px solid var(--blue); background: #ecebe5; font-size: 11px; line-height: 1.4;}
 .transient-result[data-state="error"] {border-color: var(--red); background: #ffd5d0;}
+.transient-result[data-state="complete"] {border-color: #008f63; background: #bfffdc;}
 .value-with-unit {display: flex; align-items: center; gap: 8px;}
 .value-with-unit input {min-width: 0;}
 .unit {min-width: 20px; color: var(--ink); font-size: 13px; font-weight: 900; white-space: nowrap;}

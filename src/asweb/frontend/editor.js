@@ -2,6 +2,7 @@ import {availableDefinitions, compileCircuit, inheritedParameters, loadLibrary, 
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=15";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, takeId, withImmutableId} from "./circuit.js?v=14";
+import {TransientPlot} from "./plot.js?v=3";
 
 const NS = "http://www.w3.org/2000/svg";
 window.generateNetlist = generateNetlist;
@@ -30,6 +31,7 @@ const statusElements = document.querySelector("#statusElements");
 const statusNets = document.querySelector("#statusNets");
 const statusWires = document.querySelector("#statusWires");
 const statusState = document.querySelector("#statusState");
+const transientPlot = new TransientPlot(document.querySelector("#transientPlot"));
 
 
 // ============================================================================
@@ -63,7 +65,7 @@ const application = {
         stepSize: "",
         state: "idle",
         message: "",
-        samples: [],
+        result: null,
     },
 };
 
@@ -188,7 +190,10 @@ function setMode(mode) {
     application.transient.visibleNets.clear();
     application.transient.visiblePorts.clear();
     document.body.dataset.mode = mode;
-    if (mode === "simulation") startSimulation();
+    if (mode === "simulation") {
+        transientPlot.refreshLayout();
+        startSimulation();
+    }
     elementsHeading.textContent = mode === "edit" ? "Elements" : "Port currents";
     netsHeading.textContent = mode === "edit" ? "Nets" : "Net voltages";
     propertiesHeading.textContent = mode === "edit" ? "Properties" : "Transient signals";
@@ -209,12 +214,14 @@ async function startSimulation() {
     application.compilation = {state: "working", message: "Compiling circuit…", solver: null};
     application.transient.state = "idle";
     application.transient.message = "";
-    application.transient.samples = [];
+    application.transient.result = null;
+    transientPlot.setData(null);
     renderProperties();
     try {
         const result = await compileCircuit(generateCompilationElements(resolveModel));
-        const solver = await instantiateSolver(result);
-        application.compilation = {state: "ready", message: `Compiled ${result.stateSize} state variables.`, solver};
+        const runtime = await instantiateSolver(result);
+        application.compilation = {state: "ready", message: `Compiled ${result.stateSize} state variables.`, ...runtime};
+        refreshTransientPlot();
     } catch (error) {
         application.compilation = {state: "error", message: error.message, solver: null};
     }
@@ -227,7 +234,10 @@ async function instantiateSolver(compilation) {
     const url = URL.createObjectURL(wrapper);
     try {
         const module = await import(url);
-        return await module.AntispiceSolver.instantiate(bytes);
+        return {
+            solver: await module.AntispiceSolver.instantiate(bytes),
+            layout: module.circuitLayout,
+        };
     } finally {
         URL.revokeObjectURL(url);
     }
@@ -251,14 +261,17 @@ async function runTransientSimulation() {
         const configuration = transientConfiguration();
         application.transient.state = "running";
         application.transient.message = "Running transient simulation…";
-        application.transient.samples = [];
+        application.transient.result = null;
+        transientPlot.setData(null);
         renderProperties();
         await new Promise(resolve => requestAnimationFrame(resolve));
         solver.reset();
         const operatingPoint = solver.initializeOperatingPoint(configuration.startTime);
-        application.transient.samples = Array.from(solver.integrate(configuration));
+        application.transient.result = solver.integrateArrays(configuration);
+        transientPlot.setData(application.transient.result);
+        refreshTransientPlot();
         application.transient.state = "complete";
-        application.transient.message = `Operating point converged in ${operatingPoint.iterations} iterations. Completed ${application.transient.samples.length - 1} time steps.`;
+        application.transient.message = `Operating point converged in ${operatingPoint.iterations} iterations. Completed ${application.transient.result.sampleCount - 1} time steps.`;
     } catch (error) {
         application.transient.state = "error";
         application.transient.message = error.message;
@@ -296,6 +309,7 @@ function toggleNetVoltage(nodeId) {
     renderAllWires();
     renderLists();
     renderProperties();
+    refreshTransientPlot();
 }
 
 function togglePortCurrent(element, portName) {
@@ -310,6 +324,31 @@ function togglePortCurrent(element, portName) {
     renderElement(element);
     renderLists();
     renderProperties();
+    refreshTransientPlot();
+}
+
+function refreshTransientPlot() {
+    const layout = application.compilation.layout;
+    const traces = [];
+    if (layout) {
+        for (const net of application.transient.visibleNets) {
+            const index = layout.potentials[net];
+            if (index !== undefined) traces.push({label: `V(${net})`, unit: "V", index});
+        }
+        for (const [reference, ports] of application.transient.visiblePorts) {
+            const direct = layout.currents[reference] ?? {};
+            const element = [...circuit.elements.values()].find(candidate => candidate.reference === reference);
+            for (const port of ports) {
+                if (direct[port] !== undefined) {
+                    traces.push({label: `I(${reference}, ${port})`, unit: "A", index: direct[port]});
+                } else if ((element?.electricalPorts?.[0] ?? resolveModel(element?.use)?.ports[0]) === port) {
+                    traces.push({label: `I(${reference}, ${port})`, unit: "A", indices: Object.values(direct), coefficient: -1});
+                }
+            }
+        }
+    }
+    transientPlot.setTraces(traces);
+    transientPlot.refreshLayout();
 }
 
 function netVoltageVisible(nodeId) {
@@ -1598,7 +1637,8 @@ function renderSimulationProperties() {
             application.transient[name] = input.value;
             application.transient.message = "";
             application.transient.state = "idle";
-            application.transient.samples = [];
+            application.transient.result = null;
+            transientPlot.setData(null);
             controls.querySelector(".transient-result")?.remove();
         });
         property.append(label, input);
