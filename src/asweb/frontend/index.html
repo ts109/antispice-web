@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
-<link rel="stylesheet" href="./styles.css?v=19">
+<link rel="stylesheet" href="./styles.css?v=20">
 </head>
 
 <body>
@@ -27,9 +27,11 @@
         <div class="mode-switch" role="group" aria-label="Editor mode">
             <button type="button" data-mode="edit">Edit</button>
             <button type="button" data-mode="simulation">Simulate</button>
+            <button type="button" data-mode="ac">AC</button>
         </div>
     </nav>
     <div class="simulation-only mode-notice"><strong>Transient mode</strong><span>Schematic frozen</span></div>
+    <div class="ac-only mode-notice"><strong>Small-signal AC</strong><span>Schematic frozen</span></div>
     <nav class="edit-only" aria-labelledby="toolsHeading">
         <h2 id="toolsHeading">Tools</h2>
         <div class="tool-grid">
@@ -48,6 +50,8 @@
         <h2 id="markersHeading">Net markers</h2>
         <div class="button-grid">
             <button type="button" data-tool="GND">Ground</button>
+            <button type="button" data-tool="ACV">AC voltage</button>
+            <button type="button" data-tool="ACI">AC current</button>
         </div>
     </section>
 </aside>
@@ -60,7 +64,7 @@
         <g id="overlayLayer"></g>
     </svg>
     <section id="transientPlot" aria-label="Transient simulation plot">
-        <header><strong>TRANSIENT / 0001</strong><div class="plot-legend"></div><span>WHEEL ZOOM · DRAG PAN · DOUBLE-CLICK FIT</span></header>
+        <header><strong id="plotHeading">TRANSIENT / 0001</strong><div class="plot-legend"></div><span>WHEEL ZOOM · DRAG PAN · DOUBLE-CLICK FIT</span></header>
         <div class="plot-canvas-stack">
             <canvas aria-hidden="true"></canvas>
             <canvas aria-hidden="true"></canvas>
@@ -82,6 +86,10 @@
         <h2 id="markerListHeading">Markers</h2>
         <div id="markerList" class="object-list"></div>
     </section>
+    <section class="ac-only" aria-labelledby="acInputListHeading">
+        <h2 id="acInputListHeading">AC inputs</h2>
+        <div id="acInputList" class="object-list"></div>
+    </section>
 </aside>
 
 <aside id="properties" aria-labelledby="propertiesHeading">
@@ -99,6 +107,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=42"></script>
+<script type="module" src="./editor.js?v=44"></script>
 </body>
 </html>

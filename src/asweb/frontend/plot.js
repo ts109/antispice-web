@@ -14,6 +14,7 @@ export class TransientPlot {
         this.drag = null;
         this.frame = null;
         this.downsampleScratch = [];
+        this.horizontal = {label: "TIME / s", format: formatTime, ticks: axisTicks};
         this.resizeObserver = new ResizeObserver(() => this.resize());
         this.resizeObserver.observe(root.querySelector(".plot-canvas-stack"));
         this.interaction.addEventListener("wheel", event => this.zoom(event), {passive: false});
@@ -40,6 +41,11 @@ export class TransientPlot {
         this.traces = traces.map((trace, index) => ({...trace, color: COLORS[index % COLORS.length]}));
         this.renderLegend();
         this.refreshLayout();
+        this.scheduleRender();
+    }
+
+    setHorizontalAxis(label, {format = formatValue, ticks = axisTicks} = {}) {
+        this.horizontal = {label, format, ticks};
         this.scheduleRender();
     }
 
@@ -191,7 +197,7 @@ export class TransientPlot {
         context.fillRect(0, 0, this.width, this.height);
         context.font = "700 10px 'Courier New', monospace";
         context.textBaseline = "middle";
-        const timeTicks = axisTicks(this.view.start, this.view.end, Math.max(2, Math.floor(geometry.plotWidth / 90)));
+        const timeTicks = this.horizontal.ticks(this.view.start, this.view.end, Math.max(2, Math.floor(geometry.plotWidth / 90)));
         for (const unit of geometry.units) {
             const lane = geometry.lanes.get(unit);
             const range = ranges.get(unit);
@@ -200,7 +206,7 @@ export class TransientPlot {
             context.strokeRect(geometry.left, lane.top, geometry.plotWidth, lane.bottom - lane.top);
             context.fillStyle = "#0a0a0a";
             context.textAlign = "left";
-            context.fillText(unit === "V" ? "VOLT" : unit === "A" ? "AMP" : "VALUE", 8, lane.top + 9);
+            context.fillText(unit === "V" ? "VOLT" : unit === "A" ? "AMP" : unit || "VALUE", 8, lane.top + 9);
             if (range) {
                 const valueTicks = axisTicks(range.minimum, range.maximum, Math.max(2, Math.floor((lane.bottom - lane.top) / 45)));
                 for (const value of valueTicks.values) {
@@ -230,10 +236,10 @@ export class TransientPlot {
         context.fillStyle = "#0a0a0a";
         for (const value of timeTicks.values) {
             const x = geometry.left + (value - this.view.start) / (this.view.end - this.view.start || 1) * geometry.plotWidth;
-            context.fillText(formatValue(value), x, this.height - 13);
+            context.fillText(this.horizontal.format(value), x, this.height - 13);
         }
         context.textAlign = "left";
-        context.fillText("TIME / s", 8, this.height - 13);
+        context.fillText(this.horizontal.label, 8, this.height - 13);
     }
 
     drawTraces(geometry, ranges, first, end) {
@@ -308,7 +314,7 @@ export class TransientPlot {
         context.moveTo(x, this.currentGeometry.top);
         context.lineTo(x, this.height - this.currentGeometry.bottom);
         context.stroke();
-        const lines = [`t ${formatTime(this.data.times[sample])}`];
+        const lines = [this.horizontal.format(this.data.times[sample])];
         for (const trace of this.traces) {
             const value = traceValue(this.data, trace, sample);
             lines.push(`${trace.label} ${formatValue(value)} ${trace.unit}`);
@@ -395,6 +401,7 @@ function nearestIndex(values, count, target) {
 }
 
 function traceValue(data, trace, sample) {
+    if (trace.values) return trace.values[sample];
     if (trace.index !== undefined) return data.states[sample * data.stateSize + trace.index];
     if (trace.auxiliaryIndex !== undefined) return data.auxiliaries[sample * data.auxiliaryCount + trace.auxiliaryIndex];
     if (trace.terms) {
@@ -407,6 +414,19 @@ function traceValue(data, trace, sample) {
     let value = 0;
     for (const index of trace.indices ?? []) value += data.states[sample * data.stateSize + index];
     return value * (trace.coefficient ?? 1);
+}
+
+export function logarithmicAxisTicks(minimum, maximum) {
+    const values = [];
+    const firstDecade = Math.floor(minimum);
+    const lastDecade = Math.ceil(maximum);
+    for (let decade = firstDecade; decade <= lastDecade; ++decade) {
+        for (const factor of [1, 2, 5]) {
+            const value = decade + Math.log10(factor);
+            if (value >= minimum - 1e-12 && value <= maximum + 1e-12) values.push(value);
+        }
+    }
+    return {step: 1, values};
 }
 
 function axisTicks(minimum, maximum, targetCount) {

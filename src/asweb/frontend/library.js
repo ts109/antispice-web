@@ -65,6 +65,24 @@ function addCircle(parent, cx, cy, r) {
     parent.append(circle);
 }
 
+function acInputMarker(label) {
+    return {
+        kind: "marker",
+        acInputType: label === "V" ? "voltage" : "current",
+        hitBox: {x: -24, y: -38, width: 48, height: 58},
+        ports: [{name: "input", x: 0, y: -30, axis: "v"}],
+        draw(g) {
+            addLine(g, 0, -30, 0, -17);
+            const box = svgElement("rect", {x: -17, y: -17, width: 34, height: 34});
+            box.classList.add("symbol");
+            const text = svgElement("text", {x: 0, y: 6, "text-anchor": "middle"});
+            text.classList.add("marker-label");
+            text.textContent = label;
+            g.append(box, text);
+        },
+    };
+}
+
 function addArrow(parent, x1, y1, x2, y2) {
     addLine(parent, x1, y1, x2, y2);
     const angle = Math.atan2(y2 - y1, x2 - x1);
@@ -211,7 +229,9 @@ export const library = {
             addLine(g, -10, 6, 10, 6);
             addLine(g, -4, 12, 4, 12);
         }
-    }
+    },
+    ACV: acInputMarker("V"),
+    ACI: acInputMarker("I"),
 };
 
 export function ensureGenericSymbol(key, ports) {

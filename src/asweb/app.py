@@ -9,7 +9,7 @@ import threading
 from collections import OrderedDict
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import antispice
@@ -116,12 +116,36 @@ class CompileRequest(BaseModel):
     elements: list[ElementRequest]
 
 
-def _compile_cache_key(request: CompileRequest) -> str:
+class ACInputRequest(BaseModel):
+    """One frontend-only, ground-referenced small-signal excitation case."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reference: str = Field(min_length=1)
+    type: Literal["current", "voltage"]
+    net: str = Field(min_length=1)
+
+
+class ACCompileRequest(CompileRequest):
+    """Circuit compilation request carrying independent AC analysis cases."""
+
+    inputs: list[ACInputRequest] = Field(min_length=1)
+
+
+def _compile_cache_key(request: BaseModel) -> str:
     document = json.dumps(request.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(document.encode()).hexdigest()
 
 
 def _cached_compile_response(request: CompileRequest, compilation_id: str) -> dict[str, Any]:
+    return _cached_response(request, compilation_id, lambda: _compile_response(request, compilation_id))
+
+
+def _cached_ac_compile_response(request: ACCompileRequest, compilation_id: str) -> dict[str, Any]:
+    return _cached_response(request, compilation_id, lambda: _ac_compile_response(request, compilation_id))
+
+
+def _cached_response(request: BaseModel, compilation_id: str, compile_operation: Any) -> dict[str, Any]:
     key = _compile_cache_key(request)
     cached = _compile_cache.get(key)
     if cached is not None:
@@ -139,7 +163,7 @@ def _cached_compile_response(request: CompileRequest, compilation_id: str) -> di
             logger.info("compile[%s] cache hit after admission key=%s", compilation_id, key[:12])
             return cached
         logger.info("compile[%s] cache miss key=%s", compilation_id, key[:12])
-        result = _compile_response(request, compilation_id)
+        result = compile_operation()
         _compile_cache.put(key, result)
         return result
     finally:
@@ -199,7 +223,12 @@ def _library_response() -> dict[str, Any]:
     return {"definitions": {name: _encode_definition(definition) for name, definition in antispice.BUILTIN_LIBRARY.items()}}
 
 
-def _compile_response(request: CompileRequest, compilation_id: str | None = None) -> dict[str, Any]:
+def _compile_response(
+    request: CompileRequest,
+    compilation_id: str | None = None,
+    *,
+    ac_cases: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     compilation_id = compilation_id or uuid4().hex[:8]
     started = perf_counter()
     uses = {element.use for element in request.elements}
@@ -240,16 +269,28 @@ def _compile_response(request: CompileRequest, compilation_id: str | None = None
             "auxiliary transpilation",
             lambda: antispice.transpile_auxiliary_evaluator(system),
         )
+    ac = _run_compile_stage(compilation_id, "AC linearization transpilation", lambda: antispice.transpile_ac_linearizer(system))
+    ac_auxiliaries = None
+    if system.auxiliaries:
+        ac_auxiliaries = _run_compile_stage(
+            compilation_id,
+            "AC auxiliary linearization transpilation",
+            lambda: antispice.transpile_ac_auxiliary_linearizer(system),
+        )
     memory = antispice.radau_memory_layout(system)
     required_pages = max(1, (memory.byte_length + 65_535) // 65_536)
     wasm = _run_compile_stage(
         compilation_id,
         "WebAssembly emission",
         lambda: antispice.WasmGenerator(memory_pages=required_pages).generate(
-            tuple(item for item in (function, stationary, auxiliaries, antispice.dense_lu_solve_function()) if item is not None)
+            tuple(item for item in (function, stationary, auxiliaries, ac, ac_auxiliaries, antispice.dense_lu_solve_function()) if item is not None)
         ),
     )
-    javascript = _run_compile_stage(compilation_id, "JavaScript wrapper generation", lambda: antispice.generate_javascript_radau_wrapper(system))
+    javascript = _run_compile_stage(
+        compilation_id,
+        "JavaScript wrapper generation",
+        lambda: antispice.generate_javascript_radau_wrapper(system, ac_cases=ac_cases),
+    )
     logger.info(
         "compile[%s] completed duration=%.3fs wasm_bytes=%d javascript_bytes=%d",
         compilation_id,
@@ -269,6 +310,25 @@ def _compile_response(request: CompileRequest, compilation_id: str | None = None
             },
         },
     }
+
+
+def _ac_compile_response(request: ACCompileRequest, compilation_id: str | None = None) -> dict[str, Any]:
+    references = [item.reference for item in request.inputs]
+    if len(set(references)) != len(references):
+        message = "AC input references must be unique"
+        raise ValueError(message)
+    circuit = _make_circuit(request)
+    nodes = {node for element in circuit.elements.values() for node in element.nodes}
+    cases = []
+    for item in request.inputs:
+        if item.net == "0":
+            message = f"AC input {item.reference!r} cannot drive the reference net"
+            raise ValueError(message)
+        if item.net not in nodes:
+            message = f"AC input {item.reference!r} references unknown net {item.net!r}"
+            raise ValueError(message)
+        cases.append(item.model_dump(mode="json"))
+    return _compile_response(request, compilation_id, ac_cases=cases)
 
 
 def _run_compile_stage(compilation_id: str, name: str, operation: Any) -> Any:
@@ -314,6 +374,21 @@ def create_app() -> FastAPI:
         compilation_id = uuid4().hex[:8]
         try:
             return _cached_compile_response(request, compilation_id)
+        except _CompilationBusy as error:
+            raise HTTPException(
+                status_code=503,
+                detail="all compiler slots are occupied; retry shortly",
+                headers={"Retry-After": "1"},
+            ) from error
+        except (KeyError, TypeError, ValueError) as error:
+            logger.warning("compile[%s] rejected error=%s", compilation_id, error)
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @application.post("/api/compile/ac")
+    def compile_ac(request: ACCompileRequest) -> dict[str, Any]:
+        compilation_id = uuid4().hex[:8]
+        try:
+            return _cached_ac_compile_response(request, compilation_id)
         except _CompilationBusy as error:
             raise HTTPException(
                 status_code=503,

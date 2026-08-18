@@ -44,6 +44,21 @@ if (modelFamily("resistor") !== null) process.exit(3);
 """
         subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
 
+    def test_ac_input_markers_are_registered_as_frontend_markers(self) -> None:
+        """AC toolbar tools must resolve to marker definitions, not components."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend marker definitions"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/library.js"
+        source = """
+const {library} = await import(process.argv[1]);
+if (library.ACV?.kind !== "marker" || library.ACV?.acInputType !== "voltage") process.exit(1);
+if (library.ACI?.kind !== "marker" || library.ACI?.acInputType !== "current") process.exit(2);
+if (typeof library.ACV.draw !== "function" || typeof library.ACI.draw !== "function") process.exit(3);
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
     def test_circuit_snapshot_round_trip_restores_sets_and_id_counters(self) -> None:
         """Saved editor data can be loaded before allocating collision-free IDs."""
         node = shutil.which("node")
@@ -108,6 +123,27 @@ if (configuration.minimumStepSize !== 1e-6 || configuration.maximumStepSize !== 
 state.maximumStepSize = "1e-7";
 try { transientConfiguration(state); process.exit(2); } catch (error) {
   if (!error.message.includes("must not be smaller")) process.exit(3);
+}
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
+    def test_ac_configuration_and_logarithmic_frequency_grid(self) -> None:
+        """AC controls produce exactly the requested logarithmic query points."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend AC analysis"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/ac.js"
+        source = """
+const {acConfiguration, createACState, logarithmicFrequencies} = await import(process.argv[1]);
+const state = createACState();
+Object.assign(state, {minimumFrequency: "10", maximumFrequency: "1000", pointCount: "3"});
+const configuration = acConfiguration(state);
+const frequencies = logarithmicFrequencies(configuration.minimumFrequency, configuration.maximumFrequency, configuration.pointCount);
+if (frequencies.length !== 3 || frequencies[0] !== 10 || frequencies[1] !== 100 || frequencies[2] !== 1000) process.exit(1);
+state.minimumFrequency = "0";
+try { acConfiguration(state); process.exit(2); } catch (error) {
+  if (!error.message.includes("positive")) process.exit(3);
 }
 """
         subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)

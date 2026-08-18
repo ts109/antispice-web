@@ -3,6 +3,7 @@
 html, body {margin: 0; width: 100%; height: 100%; overflow: hidden; color: var(--ink); font-family: "Courier New", ui-monospace, monospace;}
 body {display: grid; grid-template-columns: 220px minmax(0, 1fr) 220px 280px; grid-template-rows: minmax(0, 1fr) 32px; background: var(--paper);}
 body[data-mode="simulation"] {--acid: #6ff7ff; --blue: #ff3d2e; --paper: #edfaff;}
+body[data-mode="ac"] {--acid: #ffdc36; --blue: #174aff; --paper: #fff9df;}
 button, input, select {font: inherit;}
 .visually-hidden {position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;}
 
@@ -16,11 +17,13 @@ button, input, select {font: inherit;}
 .button-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 8px;}
 .component-tools {display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;}
 .tool-grid {display: grid; gap: 8px;}
-.mode-switch {display: grid; grid-template-columns: 1fr 1fr; gap: 8px;}
+.mode-switch {display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;}
 #toolbar .mode-switch button.active {background: var(--ink); color: var(--acid);}
 .simulation-only {display: none;}
+.ac-only {display: none;}
 body[data-mode="simulation"] .simulation-only {display: block;}
-body[data-mode="simulation"] .edit-only {display: none !important;}
+body[data-mode="ac"] .ac-only {display: block;}
+body[data-mode="simulation"] .edit-only, body[data-mode="ac"] .edit-only {display: none !important;}
 .mode-notice {padding: 10px; border: 3px solid var(--ink); background: var(--red); color: var(--white); box-shadow: 4px 4px 0 var(--ink); text-transform: uppercase;}
 .mode-notice strong, .mode-notice span {display: block;}
 .mode-notice strong {font-family: var(--display); font-size: 18px; letter-spacing: .03em;}
@@ -45,6 +48,7 @@ button:focus-visible, input:focus-visible {outline: 4px solid var(--blue); outli
 #workspace {position: relative; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--paper);}
 #workspace::after {position: absolute; right: 3%; bottom: 1%; z-index: 2; color: var(--ink); font-family: var(--display); font-size: clamp(90px, 17vw, 260px); letter-spacing: -.04em; line-height: .75; opacity: .045; pointer-events: none; content: "EDIT";}
 body[data-mode="simulation"] #workspace::after {color: var(--red); content: "SIMULATE";}
+body[data-mode="ac"] #workspace::after {color: var(--blue); content: "AC";}
 #editor {position: relative; z-index: 1; display: block; width: 100%; height: 100%; background-color: var(--paper); background-image: linear-gradient(#dedbd1 1px, transparent 1px), linear-gradient(90deg, #dedbd1 1px, transparent 1px); background-position: var(--grid-x, 0) var(--grid-y, 0); background-size: var(--grid-size, 20px) var(--grid-size, 20px);}
 #transientPlot {display: none; min-width: 0; min-height: 0; border-top: 6px solid var(--ink); background: var(--ink);}
 #transientPlot header {display: flex; align-items: center; min-height: 42px; gap: 14px; padding: 6px 10px; color: var(--white); overflow: hidden;}
@@ -55,12 +59,12 @@ body[data-mode="simulation"] #workspace::after {color: var(--red); content: "SIM
 .plot-legend i {display: inline-block; width: 11px; height: 11px; border: 1px solid var(--white);}
 .plot-canvas-stack {position: relative; min-width: 0; min-height: 0; background: var(--paper); cursor: crosshair; touch-action: none;}
 .plot-canvas-stack canvas {position: absolute; inset: 0; display: block; width: 100%; height: 100%;}
-body[data-mode="simulation"] #workspace {display: grid; grid-template-rows: minmax(170px, 44%) minmax(230px, 56%);}
-body[data-mode="simulation"] #transientPlot {display: grid; grid-template-rows: auto minmax(0, 1fr);}
-body[data-mode="simulation"] #editor {background-image: linear-gradient(#cce9ed 1px, transparent 1px), linear-gradient(90deg, #cce9ed 1px, transparent 1px);}
-body[data-mode="simulation"] #workspace {box-shadow: inset 0 0 0 5px var(--blue);}
-body[data-mode="simulation"] .element {cursor: default;}
-body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, body[data-mode="simulation"] .junction-hit {cursor: pointer;}
+body[data-mode="simulation"] #workspace, body[data-mode="ac"] #workspace {display: grid; grid-template-rows: minmax(170px, 44%) minmax(230px, 56%);}
+body[data-mode="simulation"] #transientPlot, body[data-mode="ac"] #transientPlot {display: grid; grid-template-rows: auto minmax(0, 1fr);}
+body[data-mode="simulation"] #editor, body[data-mode="ac"] #editor {background-image: linear-gradient(#cce9ed 1px, transparent 1px), linear-gradient(90deg, #cce9ed 1px, transparent 1px);}
+body[data-mode="simulation"] #workspace, body[data-mode="ac"] #workspace {box-shadow: inset 0 0 0 5px var(--blue);}
+body[data-mode="simulation"] .element, body[data-mode="ac"] .element {cursor: default;}
+body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, body[data-mode="simulation"] .junction-hit, body[data-mode="ac"] .port-hit, body[data-mode="ac"] .wire-hit, body[data-mode="ac"] .junction-hit {cursor: pointer;}
 
 #circuitLists, #properties {grid-row: 1; padding: 18px 16px; border-left: 4px solid var(--ink); overflow-y: auto;}
 #circuitLists {grid-column: 3;}
@@ -125,8 +129,9 @@ g.selected > .junction {fill: var(--blue); stroke: var(--white); stroke-width: 2
 .preview, .preview * {opacity: .45; pointer-events: none;}
 .temp-wire {fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 5 4; pointer-events: none;}
 
-body[data-mode="simulation"] .symbol, body[data-mode="simulation"] .reference-label, body[data-mode="simulation"] .wire, body[data-mode="simulation"] .junction {opacity: .42;}
-body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="simulation"] .element.signal-selected .reference-label, body[data-mode="simulation"] .wire.selected, body[data-mode="simulation"] g.selected > .junction {opacity: 1;}
+body[data-mode="simulation"] .symbol, body[data-mode="simulation"] .reference-label, body[data-mode="simulation"] .wire, body[data-mode="simulation"] .junction, body[data-mode="ac"] .symbol, body[data-mode="ac"] .reference-label, body[data-mode="ac"] .wire, body[data-mode="ac"] .junction {opacity: .42;}
+body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="simulation"] .element.signal-selected .reference-label, body[data-mode="simulation"] .wire.selected, body[data-mode="simulation"] g.selected > .junction, body[data-mode="ac"] .element.signal-selected .symbol, body[data-mode="ac"] .element.signal-selected .reference-label, body[data-mode="ac"] .wire.selected, body[data-mode="ac"] g.selected > .junction {opacity: 1;}
+.marker-label {fill: var(--ink); font-family: var(--display); font-size: 20px; font-weight: 900; pointer-events: none;}
 
 #statusStrip {grid-column: 1 / -1; grid-row: 2; display: flex; align-items: stretch; min-width: 0; border-top: 4px solid var(--ink); background: var(--ink); color: var(--white); font-size: 11px; font-weight: 700; letter-spacing: .04em;}
 #statusStrip > * {display: flex; align-items: center; padding: 0 12px; border-right: 2px solid #555; white-space: nowrap;}

@@ -5,8 +5,11 @@ import unittest
 from unittest.mock import patch
 
 from asweb.app import (
+    ACCompileRequest,
+    ACInputRequest,
     CompileRequest,
     ElementRequest,
+    _ac_compile_response,
     _cached_compile_response,
     _CompilationBusy,
     _compile_cache,
@@ -98,6 +101,33 @@ class ApiTest(unittest.TestCase):
 
         self.assertIn('"Q1": {"v_be": 0, "v_bc": 1, "i_forward": 2, "i_reverse": 3}', result["javascript"])
         self.assertIn("evaluate_auxiliaries", result["javascript"])
+
+    def test_ac_compile_embeds_independent_input_cases(self) -> None:
+        """Each frontend marker becomes one separately selectable AC system."""
+        request = ACCompileRequest(
+            elements=[ElementRequest(reference="R1", use="resistor", nodes={"ref": "0", "p": "out"}, parameters={"resistance": 1_000})],
+            inputs=[
+                ACInputRequest(reference="AC1", type="voltage", net="out"),
+                ACInputRequest(reference="AC2", type="current", net="out"),
+            ],
+        )
+
+        result = _ac_compile_response(request)
+
+        self.assertIn('"reference": "AC1", "type": "voltage", "net": "out"', result["javascript"])
+        self.assertIn('"reference": "AC2", "type": "current", "net": "out"', result["javascript"])
+        self.assertIn("solveAC(caseIndex, frequency", result["javascript"])
+        self.assertIn("sweepAC(caseIndex, frequencies", result["javascript"])
+
+    def test_ac_compile_rejects_reference_net_inputs(self) -> None:
+        """An AC marker cannot constrain or inject into the fixed ground net."""
+        request = ACCompileRequest(
+            elements=[ElementRequest(reference="R1", use="resistor", nodes={"ref": "0", "p": "out"}, parameters={"resistance": 1_000})],
+            inputs=[ACInputRequest(reference="AC1", type="voltage", net="0")],
+        )
+
+        with self.assertRaisesRegex(ValueError, "reference net"):
+            _ac_compile_response(request)
 
     def test_identical_compile_requests_use_the_process_cache(self) -> None:
         """A normalized request is compiled only once while its entry remains cached."""

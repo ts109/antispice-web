@@ -1,8 +1,9 @@
-import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=1";
-import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=15";
+import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=2";
+import {acConfiguration, compileACSimulation, createACState, runACSweeps} from "./ac.js?v=1";
+import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=16";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
-import {TransientPlot} from "./plot.js?v=5";
+import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=6";
 import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
 import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=2";
 
@@ -23,10 +24,12 @@ const overlayLayer = document.querySelector("#overlayLayer");
 const propertyContent = document.querySelector("#propertyContent");
 const elementList = document.querySelector("#elementList");
 const markerList = document.querySelector("#markerList");
+const acInputList = document.querySelector("#acInputList");
 const netList = document.querySelector("#netList");
 const elementsHeading = document.querySelector("#elementsHeading");
 const netsHeading = document.querySelector("#netsHeading");
 const propertiesHeading = document.querySelector("#propertiesHeading");
+const plotHeading = document.querySelector("#plotHeading");
 const componentTools = document.querySelector("#componentTools");
 const statusMode = document.querySelector("#statusMode");
 const statusZoom = document.querySelector("#statusZoom");
@@ -97,6 +100,9 @@ function displayCircuitSnapshot(snapshot) {
         element.electricalPorts ??= resolveModel(element.use)?.ports ?? library[element.model]?.ports.map(port => port.name) ?? [];
         renderElement(element);
     }
+    for (const marker of circuit.markers.values()) {
+        if (isACInputMarker(marker) && !marker.reference) marker.reference = nextACInputReference();
+    }
     renderAllMarkers();
     renderAllJunctions();
     renderAllWires();
@@ -139,7 +145,13 @@ const application = {
     libraryError: "",
     compilation: {state: "idle", message: "", solver: null},
     transient: createTransientState(),
+    acCompilation: {state: "idle", message: "", solver: null},
+    ac: createACState(),
 };
+
+function activeAnalysis() {
+    return application.mode === "ac" ? application.ac : application.transient;
+}
 
 function symbolForDefinition(use, overrides = {}) {
     const resolved = resolveModel(use);
@@ -207,7 +219,7 @@ function enterSelectMode() {
 
 
 function enterPlacementMode(type) {
-    if (application.mode === "simulation" || !application.libraryReady) {
+    if (application.mode !== "edit" || !application.libraryReady) {
         return;
     }
     placingType = type;
@@ -250,7 +262,7 @@ function updateToolbar() {
     }
 
     for (const button of document.querySelectorAll("#toolbar [data-rotate]")) {
-        button.disabled = application.mode === "simulation" || selected?.kind !== "element" && selected?.kind !== "marker";
+        button.disabled = application.mode !== "edit" || selected?.kind !== "element" && selected?.kind !== "marker";
     }
 }
 
@@ -259,16 +271,27 @@ function setMode(mode) {
         return;
     }
     application.mode = mode;
-    application.transient.visibleNets.clear();
-    application.transient.visibleElementSignals.clear();
+    const analysis = activeAnalysis();
+    analysis.visibleNets.clear();
+    analysis.visibleElementSignals.clear();
     document.body.dataset.mode = mode;
     if (mode === "simulation") {
+        transientPlot.setHorizontalAxis("TIME / s", {format: value => `${formatPlotValue(value)} s`});
+        plotHeading.textContent = "TRANSIENT / 0001";
         transientPlot.refreshLayout();
         startSimulation();
+    } else if (mode === "ac") {
+        transientPlot.setHorizontalAxis("FREQUENCY / Hz", {
+            format: value => `${formatPlotValue(10 ** value)} Hz`,
+            ticks: logarithmicAxisTicks,
+        });
+        plotHeading.textContent = "SMALL-SIGNAL AC / 0001";
+        transientPlot.refreshLayout();
+        startACSimulation();
     }
     elementsHeading.textContent = mode === "edit" ? "Elements" : "Element signals";
     netsHeading.textContent = mode === "edit" ? "Nets" : "Net potentials";
-    propertiesHeading.textContent = mode === "edit" ? "Properties" : "Transient signals";
+    propertiesHeading.textContent = mode === "edit" ? "Properties" : mode === "ac" ? "AC analysis" : "Transient signals";
     cancelCurrentOperation();
     selected = null;
     for (const element of circuit.elements.values()) {
@@ -280,6 +303,12 @@ function setMode(mode) {
     renderLists();
     renderProperties();
     updateStatus();
+}
+
+function formatPlotValue(value) {
+    if (value === 0) return "0";
+    const magnitude = Math.abs(value);
+    return magnitude >= 1e4 || magnitude < 1e-3 ? value.toExponential(2) : value.toPrecision(4).replace(/\.?0+$/, "");
 }
 
 async function startSimulation() {
@@ -301,12 +330,91 @@ async function startSimulation() {
         if (application.compilation !== pendingCompilation) return;
         application.compilation = {state: "error", message: error.message, solver: null};
     } finally {
-        if (application.compilation !== pendingCompilation && application.compilation.state !== "working") {
-            document.body.removeAttribute("aria-busy");
-            updateStatus();
-        }
+        document.body.toggleAttribute(
+            "aria-busy",
+            application.compilation.state === "working" || application.acCompilation.state === "working",
+        );
+        updateStatus();
     }
     if (application.mode === "simulation") renderProperties();
+}
+
+function isACInputMarker(marker) {
+    return marker?.type === "ACV" || marker?.type === "ACI";
+}
+
+function nextACInputReference() {
+    let index = 1;
+    const references = new Set([...circuit.markers.values()].filter(isACInputMarker).map(marker => marker.reference));
+    while (references.has(`AC${index}`)) ++index;
+    return `AC${index}`;
+}
+
+function acCompilationInputs() {
+    return [...circuit.markers.values()].filter(isACInputMarker).map(marker => ({
+        reference: marker.reference,
+        type: library[marker.type].acInputType,
+        net: netForNode(marker.ports[0]).name,
+    }));
+}
+
+async function startACSimulation() {
+    const inputs = acCompilationInputs();
+    const pendingCompilation = {state: "working", message: "Compiling AC analysis…", solver: null};
+    application.acCompilation = pendingCompilation;
+    application.ac.state = "idle";
+    application.ac.message = "";
+    application.ac.results = new Map();
+    transientPlot.setData(null);
+    document.body.setAttribute("aria-busy", "true");
+    updateStatus();
+    renderProperties();
+    try {
+        if (!inputs.length) throw new Error("Place at least one AC voltage or current input marker.");
+        const runtime = await compileACSimulation(generateCompilationElements(resolveModel), inputs);
+        if (application.acCompilation !== pendingCompilation) return;
+        application.acCompilation = {state: "ready", message: `Compiled ${inputs.length} independent AC case${inputs.length === 1 ? "" : "s"}.`, ...runtime};
+        if (!inputs.some(input => input.reference === application.ac.selectedInput)) {
+            application.ac.selectedInput = inputs[0].reference;
+        }
+        refreshACPlot();
+    } catch (error) {
+        if (application.acCompilation !== pendingCompilation) return;
+        application.acCompilation = {state: "error", message: error.message, solver: null};
+    } finally {
+        document.body.toggleAttribute(
+            "aria-busy",
+            application.compilation.state === "working" || application.acCompilation.state === "working",
+        );
+        updateStatus();
+    }
+    if (application.mode === "ac") {
+        renderLists();
+        renderProperties();
+    }
+}
+
+async function runACSimulation() {
+    const {solver, layout} = application.acCompilation;
+    if (!solver || application.ac.state === "running") return;
+    try {
+        const configuration = acConfiguration(application.ac);
+        application.ac.state = "running";
+        application.ac.message = "Running AC sweeps…";
+        application.ac.results = new Map();
+        transientPlot.setData(null);
+        renderProperties();
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const {operatingPoint, results} = runACSweeps(solver, layout, configuration);
+        application.ac.results = results;
+        application.ac.state = "complete";
+        application.ac.message = `Operating point converged in ${operatingPoint.iterations} iterations. Solved ${results.size} AC case${results.size === 1 ? "" : "s"}.`;
+        refreshACPlot();
+    } catch (error) {
+        application.ac.state = "error";
+        application.ac.message = error.message;
+    }
+    if (application.mode === "ac") renderProperties();
 }
 
 async function runTransientSimulation() {
@@ -335,7 +443,8 @@ async function runTransientSimulation() {
 
 function updateStatus() {
     const scale = viewportPixels.width && viewport.width ? viewport.width / viewportPixels.width : 1;
-    const compiling = application.compilation.state === "working";
+    const compilation = application.mode === "ac" ? application.acCompilation : application.compilation;
+    const compiling = application.mode !== "edit" && compilation.state === "working";
     statusMode.classList.toggle("compiling", compiling);
     statusMode.replaceChildren();
     if (compiling) {
@@ -351,7 +460,7 @@ function updateStatus() {
         statusMode.append(dots);
         statusMode.setAttribute("aria-label", "Compiling circuit");
     } else {
-        statusMode.textContent = application.mode === "edit" ? "EDIT" : "SIMULATE";
+        statusMode.textContent = application.mode === "edit" ? "EDIT" : application.mode === "ac" ? "AC" : "SIMULATE";
         statusMode.removeAttribute("aria-label");
     }
     statusZoom.textContent = `${Math.round(100 / scale)}%`;
@@ -375,28 +484,34 @@ function toggleNetVoltage(nodeId) {
     if (netName === "0") {
         return;
     }
-    toggleSet(application.transient.visibleNets, netName);
+    toggleSet(activeAnalysis().visibleNets, netName);
     renderAllMarkers();
     renderAllJunctions();
     renderAllWires();
     renderLists();
     renderProperties();
-    refreshTransientPlot();
+    refreshAnalysisPlot();
 }
 
 function toggleElementSignal(element, signalName) {
-    if (!application.transient.visibleElementSignals.has(element.reference)) {
-        application.transient.visibleElementSignals.set(element.reference, new Set());
+    const analysis = activeAnalysis();
+    if (!analysis.visibleElementSignals.has(element.reference)) {
+        analysis.visibleElementSignals.set(element.reference, new Set());
     }
-    const signals = application.transient.visibleElementSignals.get(element.reference);
+    const signals = analysis.visibleElementSignals.get(element.reference);
     toggleSet(signals, signalName);
     if (!signals.size) {
-        application.transient.visibleElementSignals.delete(element.reference);
+        analysis.visibleElementSignals.delete(element.reference);
     }
     renderElement(element);
     renderLists();
     renderProperties();
-    refreshTransientPlot();
+    refreshAnalysisPlot();
+}
+
+function refreshAnalysisPlot() {
+    if (application.mode === "ac") refreshACPlot();
+    else refreshTransientPlot();
 }
 
 function refreshTransientPlot() {
@@ -436,13 +551,94 @@ function refreshTransientPlot() {
     transientPlot.refreshLayout();
 }
 
+function refreshACPlot() {
+    const layout = application.acCompilation.layout;
+    const result = application.ac.results.get(application.ac.selectedInput);
+    if (!layout || !result) {
+        transientPlot.setData(null);
+        transientPlot.setTraces([]);
+        return;
+    }
+    const analysisCase = layout.acCases.find(candidate => candidate.reference === application.ac.selectedInput);
+    const inputUnit = analysisCase?.type === "voltage" ? "V" : "A";
+    const traces = [];
+    const appendResponse = (label, outputUnit, descriptor) => {
+        const {real, imaginary} = acSignalValues(result, descriptor);
+        const magnitude = new Float64Array(result.sampleCount);
+        const phase = new Float64Array(result.sampleCount);
+        for (let sample = 0; sample < result.sampleCount; ++sample) {
+            magnitude[sample] = Math.hypot(real[sample], imaginary[sample]);
+            phase[sample] = Math.atan2(imaginary[sample], real[sample]) * 180 / Math.PI;
+        }
+        traces.push({label: `|${label}|`, unit: `${outputUnit}/${inputUnit}`, values: magnitude});
+        traces.push({label: `∠${label}`, unit: "°", values: phase});
+    };
+    for (const net of application.ac.visibleNets) {
+        const index = layout.potentials[net];
+        if (index !== undefined) appendResponse(`φ(${net})`, "V", {index});
+    }
+    for (const [reference, signals] of application.ac.visibleElementSignals) {
+        const direct = layout.currents[reference] ?? {};
+        const element = [...circuit.elements.values()].find(candidate => candidate.reference === reference);
+        const model = resolveModel(element?.use);
+        const portNodes = new Map((model?.ports ?? []).map((port, index) => [port, netForNode(element.ports[index]).name]));
+        const referencePort = model?.ports[0];
+        for (const signal of signals) {
+            const kind = signal.slice(0, 2);
+            const name = signal.slice(2);
+            if (kind === "I:") {
+                const index = direct[name];
+                appendResponse(
+                    `${reference}.I_${name}`,
+                    "A",
+                    index !== undefined ? {index} : {terms: Object.values(direct).map(currentIndex => [currentIndex, -1])},
+                );
+            } else if (kind === "U:") {
+                const positive = layout.potentials[portNodes.get(name)] ?? null;
+                const negative = layout.potentials[portNodes.get(referencePort)] ?? null;
+                appendResponse(`${reference}.U_${name}`, "V", {terms: [[positive, 1], [negative, -1]]});
+            } else if (kind === "A:") {
+                const index = layout.auxiliaries?.[reference]?.[name];
+                if (index !== undefined) appendResponse(`${reference}.${name}`, auxiliaryUnit(name) || "1", {auxiliaryIndex: index});
+            }
+        }
+    }
+    transientPlot.setData({
+        ...result,
+        times: Float64Array.from(result.frequencies, Math.log10),
+    });
+    transientPlot.setTraces(traces);
+    transientPlot.refreshLayout();
+}
+
+function acSignalValues(result, descriptor) {
+    const real = new Float64Array(result.sampleCount);
+    const imaginary = new Float64Array(result.sampleCount);
+    for (let sample = 0; sample < result.sampleCount; ++sample) {
+        if (descriptor.auxiliaryIndex !== undefined) {
+            const offset = sample * result.auxiliaryCount + descriptor.auxiliaryIndex;
+            real[sample] = result.auxiliaryReal[offset];
+            imaginary[sample] = result.auxiliaryImaginary[offset];
+            continue;
+        }
+        const terms = descriptor.index !== undefined ? [[descriptor.index, 1]] : descriptor.terms;
+        for (const [index, coefficient] of terms) {
+            if (index === null) continue;
+            const offset = sample * result.stateSize + index;
+            real[sample] += coefficient * result.realStates[offset];
+            imaginary[sample] += coefficient * result.imaginaryStates[offset];
+        }
+    }
+    return {real, imaginary};
+}
+
 function netVoltageVisible(nodeId) {
     const netName = netForNode(nodeId).name;
-    return netName !== "0" && application.transient.visibleNets.has(netName);
+    return netName !== "0" && activeAnalysis().visibleNets.has(netName);
 }
 
 function elementSignalVisible(element, signalName) {
-    return application.transient.visibleElementSignals.get(element.reference)?.has(signalName) ?? false;
+    return activeAnalysis().visibleElementSignals.get(element.reference)?.has(signalName) ?? false;
 }
 
 function auxiliaryUnit(name) {
@@ -626,7 +822,7 @@ svg.addEventListener("pointerdown", event => {
         if (event.target !== svg)
             return;
 
-        if (application.mode === "simulation") {
+        if (application.mode !== "edit") {
             return;
         }
 
@@ -663,7 +859,7 @@ svg.addEventListener("pointerdown", event => {
 
 
 window.addEventListener("pointerup", () => {
-        if (application.mode === "simulation") {
+        if (application.mode !== "edit") {
             return;
         }
         finishSegmentDrag();
@@ -680,7 +876,7 @@ window.addEventListener("pointerup", () => {
 
 
 window.addEventListener("keydown", event => {
-    if (application.mode === "simulation") {
+    if (application.mode !== "edit") {
         return;
     }
     /*
@@ -804,7 +1000,10 @@ function refreshElementSymbol(element) {
 
 function createMarker(type, x, y) {
     const definition = library[type];
-    const marker = withImmutableId({type, x, y, rotation: 0, ports: []}, takeId("marker"));
+    const marker = withImmutableId(
+        {type, x, y, rotation: 0, ports: [], ...(definition.acInputType ? {reference: nextACInputReference()} : {})},
+        takeId("marker"),
+    );
     definition.ports.forEach((port, index) => {
         const node = {id: takeId("node"), kind: "marker", marker: marker.id, port: port.name, x: x + port.x, y: y + port.y, axis: port.axis};
         circuit.nodes.set(node.id, node);
@@ -824,6 +1023,11 @@ function renderMarker(marker) {
         g.classList.add("element", "marker");
         g.append(svgElement("rect", {...library[marker.type].hitBox, class: "element-hit"}));
         library[marker.type].draw(g);
+        if (isACInputMarker(marker)) {
+            const label = svgElement("text", {x: 22, y: 7});
+            label.classList.add("reference-label", "ac-input-reference");
+            g.append(label);
+        }
         marker.ports.forEach((nodeId, index) => {
             const port = library[marker.type].ports[index];
             const visible = svgElement("circle", {cx: port.x, cy: port.y, r: 5});
@@ -837,7 +1041,11 @@ function renderMarker(marker) {
                     return;
                 }
                 event.stopPropagation();
-                if (application.mode === "simulation") {
+                if (application.mode === "ac" && isACInputMarker(marker)) {
+                    selectACInput(marker);
+                    return;
+                }
+                if (application.mode !== "edit") {
                     toggleNetVoltage(nodeId);
                     return;
                 }
@@ -850,7 +1058,11 @@ function renderMarker(marker) {
                 return;
             }
             event.stopPropagation();
-            if (application.mode === "simulation") {
+            if (application.mode === "ac" && isACInputMarker(marker)) {
+                selectACInput(marker);
+                return;
+            }
+            if (application.mode !== "edit") {
                 toggleNetVoltage(marker.ports[0]);
                 return;
             }
@@ -862,13 +1074,27 @@ function renderMarker(marker) {
         elementLayer.append(g);
     }
     g.setAttribute("transform", `translate(${marker.x} ${marker.y}) rotate(${marker.rotation})`);
+    const referenceLabel = g.querySelector(".ac-input-reference");
+    if (referenceLabel) referenceLabel.textContent = marker.reference;
     g.classList.toggle("selected", selected?.kind === "marker" && selected.id === marker.id);
-    g.classList.toggle("signal-selected", application.mode === "simulation" && netVoltageVisible(marker.ports[0]));
+    g.classList.toggle("signal-selected", application.mode !== "edit" && (
+        application.mode === "ac" && isACInputMarker(marker)
+            ? application.ac.selectedInput === marker.reference
+            : netVoltageVisible(marker.ports[0])
+    ));
     for (const nodeId of marker.ports) {
         const visible = g.querySelector(`.port-visible[data-node-id="${nodeId}"]`);
-        visible.classList.toggle("signal-active", application.mode === "simulation" && netVoltageVisible(nodeId));
+        visible.classList.toggle("signal-active", application.mode !== "edit" && netVoltageVisible(nodeId));
         visible.style.display = nodeDegree(nodeId) > 0 ? "none" : "";
     }
+}
+
+function selectACInput(marker) {
+    application.ac.selectedInput = marker.reference;
+    renderAllMarkers();
+    renderLists();
+    renderProperties();
+    refreshACPlot();
 }
 
 function renderAllMarkers() {
@@ -916,7 +1142,7 @@ function renderElement(element) {
                             return;
 
                         event.stopPropagation();
-                        if (application.mode === "simulation") {
+                        if (application.mode !== "edit") {
                             const portName = element.electricalPorts?.[index] ?? port.name;
                             toggleElementSignal(element, `I:${portName}`);
                             return;
@@ -942,7 +1168,7 @@ function renderElement(element) {
                     return;
 
                 event.stopPropagation();
-                if (application.mode === "simulation") {
+                if (application.mode !== "edit") {
                     return;
                 }
 
@@ -970,7 +1196,7 @@ function renderElement(element) {
         selected?.kind === "element" &&
         selected.id === element.id
     );
-    g.classList.toggle("signal-selected", application.mode === "simulation" && application.transient.visibleElementSignals.has(element.reference));
+    g.classList.toggle("signal-selected", application.mode !== "edit" && activeAnalysis().visibleElementSignals.has(element.reference));
 
 
     // --------------------------------------------------
@@ -984,7 +1210,7 @@ function renderElement(element) {
             return;
 
         const portName = element.electricalPorts?.[index] ?? library[element.model].ports[index].name;
-        visible.classList.toggle("signal-active", application.mode === "simulation" && (
+        visible.classList.toggle("signal-active", application.mode !== "edit" && (
             elementSignalVisible(element, `I:${portName}`) || elementSignalVisible(element, `U:${portName}`)
         ));
         visible.style.display = nodeDegree(nodeId) > 0 ? "none" : "";
@@ -1026,7 +1252,7 @@ function renderJunction(node) {
                     return;
 
                 event.stopPropagation();
-                if (application.mode === "simulation") {
+                if (application.mode !== "edit") {
                     toggleNetVoltage(node.id);
                     return;
                 }
@@ -1045,7 +1271,7 @@ function renderJunction(node) {
     }
 
     group.setAttribute("transform", `translate(${node.x} ${node.y})`);
-    group.classList.toggle("selected", application.mode === "simulation" ? netVoltageVisible(node.id) : selected?.kind === "junction" && selected.id === node.id || selected?.kind === "net" && netForNode(node.id)?.id === selected.id);
+    group.classList.toggle("selected", application.mode !== "edit" ? netVoltageVisible(node.id) : selected?.kind === "junction" && selected.id === node.id || selected?.kind === "net" && netForNode(node.id)?.id === selected.id);
     group.querySelector(".junction").style.display = nodeDegree(node.id) >= 3 ? "" : "none";
 }
 
@@ -1074,7 +1300,7 @@ function renderAllJunctions() {
 // ============================================================================
 
 function handleNodeClick(nodeId) {
-    if (application.mode === "simulation") {
+    if (application.mode !== "edit") {
         toggleNetVoltage(nodeId);
         return;
     }
@@ -1167,7 +1393,7 @@ function renderWire(wire) {
 
                 event.stopPropagation();
 
-                if (application.mode === "simulation") {
+                if (application.mode !== "edit") {
                     toggleNetVoltage(wire.a);
                     return;
                 }
@@ -1240,7 +1466,7 @@ function renderWire(wire) {
 }
 
 function wireIsSelected(wire) {
-    if (application.mode === "simulation") {
+    if (application.mode !== "edit") {
         return netVoltageVisible(wire.a);
     }
     return selected?.kind === "wire" && selected.id === wire.id || selected?.kind === "waypoint" && selected.wireId === wire.id || selected?.kind === "net" && netForNode(wire.a)?.id === selected.id;
@@ -1446,7 +1672,7 @@ function updateTerminalNodes(object) {
 }
 
 function rotateSelected(degrees) {
-    if (application.mode === "simulation") {
+    if (application.mode !== "edit") {
         return;
     }
     if (selected?.kind !== "element" && selected?.kind !== "marker") {
@@ -1499,6 +1725,7 @@ function renderLists() {
     elementList.replaceChildren();
     markerList.replaceChildren();
     netList.replaceChildren();
+    acInputList.replaceChildren();
     const elements = [...circuit.elements.values()].sort((a, b) => a.reference.localeCompare(b.reference, undefined, {numeric: true}));
     for (const element of elements) {
         if (application.mode === "edit") {
@@ -1544,18 +1771,26 @@ function renderLists() {
         button.classList.toggle("active", selected?.kind === "marker" && selected.id === marker.id);
         button.addEventListener("click", () => select({kind: "marker", id: marker.id}));
         markerList.append(button);
+        if (application.mode === "ac" && isACInputMarker(marker)) {
+            const input = document.createElement("button");
+            input.type = "button";
+            input.textContent = `${marker.reference} · ${library[marker.type].acInputType}`;
+            input.classList.toggle("active", application.ac.selectedInput === marker.reference);
+            input.addEventListener("click", () => selectACInput(marker));
+            acInputList.append(input);
+        }
     }
     const nets = [...circuit.nets.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
     for (const net of nets) {
         const button = document.createElement("button");
         button.type = "button";
-        button.textContent = application.mode === "simulation" && net.name === "0" ? "0 · fixed" : net.name;
-        button.disabled = application.mode === "simulation" && net.name === "0";
+        button.textContent = application.mode !== "edit" && net.name === "0" ? "0 · fixed" : net.name;
+        button.disabled = application.mode !== "edit" && net.name === "0";
         if (button.disabled) {
             button.title = "Ground is fixed at 0 V and is not plotted";
         }
-        button.classList.toggle("active", application.mode === "simulation" ? application.transient.visibleNets.has(net.name) : selected?.kind === "net" && selected.id === net.id);
-        button.addEventListener("click", () => application.mode === "simulation" ? toggleNetVoltage([...net.members][0]) : select({kind: "net", id: net.id}));
+        button.classList.toggle("active", application.mode !== "edit" ? activeAnalysis().visibleNets.has(net.name) : selected?.kind === "net" && selected.id === net.id);
+        button.addEventListener("click", () => application.mode !== "edit" ? toggleNetVoltage([...net.members][0]) : select({kind: "net", id: net.id}));
         netList.append(button);
     }
 }
@@ -1568,6 +1803,10 @@ function renderLists() {
 function renderProperties() {
     propertyContent.replaceChildren();
 
+    if (application.mode === "ac") {
+        renderACProperties();
+        return;
+    }
     if (application.mode === "simulation") {
         renderSimulationProperties();
         return;
@@ -1813,18 +2052,19 @@ function renderSimulationProperties() {
     }
 
     const active = propertySection("Displayed signals", "simulation-signals");
-    const signals = [];
-    for (const net of application.transient.visibleNets) {
-        signals.push(`φ(${net})`);
-    }
-    for (const [reference, elementSignals] of application.transient.visibleElementSignals) {
+    appendDisplayedSignals(application.transient, active);
+}
+
+function appendDisplayedSignals(analysis, section) {
+    const signals = [...analysis.visibleNets].map(net => `φ(${net})`);
+    for (const [reference, elementSignals] of analysis.visibleElementSignals) {
         for (const signal of elementSignals) {
             const [kind, name] = signal.split(":", 2);
             signals.push(`${reference}.${kind === "A" ? "" : `${kind}_`}${name}`);
         }
     }
     if (!signals.length) {
-        active.append("No signals selected");
+        section.append("No signals selected");
         return;
     }
     const list = document.createElement("ul");
@@ -1833,7 +2073,71 @@ function renderSimulationProperties() {
         item.textContent = signal;
         list.append(item);
     }
-    active.append(list);
+    section.append(list);
+}
+
+function renderACProperties() {
+    const status = propertySection("AC analysis mode");
+    const explanation = document.createElement("p");
+    explanation.textContent = application.acCompilation.message || "The schematic is frozen while its small-signal systems are compiled.";
+    status.dataset.state = application.acCompilation.state;
+    status.append(explanation);
+
+    const controls = propertySection("Frequency sweep", "transient-controls");
+    const form = document.createElement("form");
+    const fields = [
+        ["Operating point time", "operatingTime", application.ac.operatingTime, "any"],
+        ["Minimum frequency", "minimumFrequency", application.ac.minimumFrequency, "any"],
+        ["Maximum frequency", "maximumFrequency", application.ac.maximumFrequency, "any"],
+        ["Frequency points", "pointCount", application.ac.pointCount, "1"],
+        ["Newton residual tolerance", "residualTolerance", application.ac.residualTolerance, "any"],
+    ];
+    for (const [labelText, name, value, step] of fields) {
+        const property = document.createElement("div");
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        property.className = "property";
+        label.htmlFor = `ac-${name}`;
+        label.textContent = labelText;
+        input.id = label.htmlFor;
+        input.name = name;
+        input.type = "number";
+        input.step = step;
+        input.required = true;
+        input.value = value;
+        input.disabled = application.ac.state === "running";
+        input.addEventListener("input", () => {
+            application.ac[name] = input.value;
+            application.ac.message = "";
+            application.ac.state = "idle";
+            application.ac.results = new Map();
+            transientPlot.setData(null);
+            controls.querySelector(".transient-result")?.remove();
+        });
+        property.append(label, input);
+        form.append(property);
+    }
+    const run = document.createElement("button");
+    run.type = "submit";
+    run.textContent = application.ac.state === "running" ? "Solving…" : "Run AC analysis";
+    run.disabled = application.acCompilation.state !== "ready" || application.ac.state === "running";
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        runACSimulation();
+    });
+    form.append(run);
+    controls.append(form);
+    if (application.ac.message) {
+        const result = document.createElement("p");
+        result.className = "transient-result";
+        result.dataset.state = application.ac.state;
+        result.textContent = application.ac.message;
+        controls.append(result);
+    }
+
+    const selectedInput = propertySection("Selected input");
+    selectedInput.append(application.ac.selectedInput ?? "Select an AC marker in the schematic or input list.");
+    appendDisplayedSignals(application.ac, propertySection("Displayed signals", "simulation-signals"));
 }
 
 function propertySection(title, className = "") {
@@ -1911,7 +2215,7 @@ function renderNetEditor(net, note) {
 // ============================================================================
 
 function deleteSelected() {
-    if (application.mode === "simulation") {
+    if (application.mode !== "edit") {
         return;
     }
     if (!selected)

@@ -40,3 +40,14 @@ export async function compileCircuit(elements) {
     if (!response.ok) throw new Error(result.detail ?? `Compilation failed (${response.status})`);
     return result;
 }
+
+export async function compileAC(elements, inputs) {
+    const response = await fetch("/api/compile/ac", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({version: 1, elements, inputs}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail ?? `AC compilation failed (${response.status})`);
+    return result;
+}
