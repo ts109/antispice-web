@@ -139,27 +139,44 @@ export class TransientPlot {
         for (const unit of new Set(this.traces.map(trace => trace.unit))) {
             let minimum = Infinity;
             let maximum = -Infinity;
+            let strictlyPositive = true;
+            const unitTraces = this.traces.filter(trace => trace.unit === unit);
             for (const trace of this.traces) {
                 if (trace.unit !== unit) continue;
                 for (let sample = first; sample < end; ++sample) {
                     const value = traceValue(this.data, trace, sample);
                     if (Number.isFinite(value)) {
+                        strictlyPositive &&= value > 0;
                         minimum = Math.min(minimum, value);
                         maximum = Math.max(maximum, value);
                     }
                 }
             }
             if (minimum !== Infinity) {
-                if (minimum === maximum) {
+                const logarithmic = unitTraces.every(trace => trace.scale === "log-if-positive") && strictlyPositive;
+                if (logarithmic) {
+                    let plotMinimum = Math.log10(minimum);
+                    let plotMaximum = Math.log10(maximum);
+                    if (plotMinimum === plotMaximum) {
+                        plotMinimum -= 0.1;
+                        plotMaximum += 0.1;
+                    } else {
+                        const padding = (plotMaximum - plotMinimum) * 0.08;
+                        plotMinimum -= padding;
+                        plotMaximum += padding;
+                    }
+                    ranges.set(unit, {minimum, maximum, plotMinimum, plotMaximum, scale: "log"});
+                } else if (minimum === maximum) {
                     const padding = Math.max(1e-12, Math.abs(minimum) * 0.1, 1e-6);
                     minimum -= padding;
                     maximum += padding;
+                    ranges.set(unit, {minimum, maximum, plotMinimum: minimum, plotMaximum: maximum, scale: "linear"});
                 } else {
                     const padding = (maximum - minimum) * 0.08;
                     minimum -= padding;
                     maximum += padding;
+                    ranges.set(unit, {minimum, maximum, plotMinimum: minimum, plotMaximum: maximum, scale: "linear"});
                 }
-                ranges.set(unit, {minimum, maximum});
             }
         }
         return ranges;
@@ -208,9 +225,14 @@ export class TransientPlot {
             context.textAlign = "left";
             context.fillText(unit === "V" ? "VOLT" : unit === "A" ? "AMP" : unit || "VALUE", 8, lane.top + 9);
             if (range) {
-                const valueTicks = axisTicks(range.minimum, range.maximum, Math.max(2, Math.floor((lane.bottom - lane.top) / 45)));
+                const targetCount = Math.max(2, Math.floor((lane.bottom - lane.top) / 45));
+                const valueTicks = unit === "rad"
+                    ? radianAxisTicks(range.plotMinimum, range.plotMaximum)
+                    : range.scale === "log"
+                        ? logarithmicValueTicks(range.plotMinimum, range.plotMaximum)
+                        : axisTicks(range.plotMinimum, range.plotMaximum, targetCount);
                 for (const value of valueTicks.values) {
-                    const y = lane.bottom - (value - range.minimum) / (range.maximum - range.minimum) * (lane.bottom - lane.top);
+                    const y = lane.bottom - (axisCoordinate(value, range) - range.plotMinimum) / (range.plotMaximum - range.plotMinimum) * (lane.bottom - lane.top);
                     context.strokeStyle = value === 0 ? "#737373" : "#b8b6ae";
                     context.lineWidth = value === 0 ? 2 : 1;
                     context.beginPath();
@@ -219,7 +241,7 @@ export class TransientPlot {
                     context.stroke();
                     context.fillStyle = "#0a0a0a";
                     context.textAlign = "right";
-                    context.fillText(formatValue(value), geometry.left - 6, y);
+                    context.fillText(valueTicks.format?.(value) ?? formatValue(value), geometry.left - 6, y);
                 }
             }
             for (const value of timeTicks.values) {
@@ -249,7 +271,7 @@ export class TransientPlot {
             const lane = geometry.lanes.get(trace.unit);
             const range = ranges.get(trace.unit);
             if (!lane || !range) continue;
-            const yFor = value => lane.bottom - (value - range.minimum) / (range.maximum - range.minimum) * (lane.bottom - lane.top);
+            const yFor = value => lane.bottom - (axisCoordinate(value, range) - range.plotMinimum) / (range.plotMaximum - range.plotMinimum) * (lane.bottom - lane.top);
             context.strokeStyle = trace.color;
             context.lineWidth = 2.5;
             context.lineCap = "square";
@@ -427,6 +449,39 @@ export function logarithmicAxisTicks(minimum, maximum) {
         }
     }
     return {step: 1, values};
+}
+
+function logarithmicValueTicks(minimumExponent, maximumExponent) {
+    const values = [];
+    for (let decade = Math.floor(minimumExponent); decade <= Math.ceil(maximumExponent); ++decade) {
+        for (const factor of [1, 2, 5]) {
+            const value = factor * 10 ** decade;
+            const exponent = Math.log10(value);
+            if (exponent >= minimumExponent - 1e-12 && exponent <= maximumExponent + 1e-12) values.push(value);
+        }
+    }
+    return {values};
+}
+
+export function radianAxisTicks(minimum, maximum) {
+    const ticks = [
+        [-Math.PI, "−π"],
+        [-Math.PI / 2, "−π/2"],
+        [-Math.PI / 4, "−π/4"],
+        [0, "0"],
+        [Math.PI / 4, "π/4"],
+        [Math.PI / 2, "π/2"],
+        [Math.PI, "π"],
+    ];
+    const labels = new Map(ticks);
+    return {
+        values: ticks.map(([value]) => value).filter(value => value >= minimum - 1e-12 && value <= maximum + 1e-12),
+        format: value => labels.get(value),
+    };
+}
+
+function axisCoordinate(value, range) {
+    return range.scale === "log" ? Math.log10(value) : value;
 }
 
 function axisTicks(minimum, maximum, targetCount) {

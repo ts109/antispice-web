@@ -148,6 +148,22 @@ try { acConfiguration(state); process.exit(2); } catch (error) {
 """
         subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
 
+    def test_phase_axis_uses_canonical_radian_ticks(self) -> None:
+        """Phase lanes label the canonical fractions of pi in radians."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend plot axes"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/plot.js"
+        source = """
+const {radianAxisTicks} = await import(process.argv[1]);
+const ticks = radianAxisTicks(-Math.PI / 2, Math.PI / 2);
+const expected = [-Math.PI / 2, -Math.PI / 4, 0, Math.PI / 4, Math.PI / 2];
+if (ticks.values.length !== expected.length || ticks.values.some((value, index) => value !== expected[index])) process.exit(1);
+if (ticks.format(-Math.PI / 4) !== String.fromCodePoint(0x2212) + "π/4" || ticks.format(Math.PI / 2) !== "π/2") process.exit(2);
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
 
 if __name__ == "__main__":
     unittest.main()

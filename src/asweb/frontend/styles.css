@@ -84,8 +84,8 @@ body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, 
 .simulation-element + .simulation-element {margin-top: 8px;}
 .simulation-element-name {padding: 8px; color: var(--acid); font-size: 12px; font-weight: 900; cursor: pointer;}
 .simulation-element-name::marker {color: white;}
-.simulation-signals {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; padding: 0 8px 8px;}
-.simulation-signals button {min-width: 0; padding-inline: 4px; overflow: hidden; font-size: 11px; text-align: center; text-overflow: ellipsis; white-space: nowrap;}
+.element-signal-grid {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; padding: 0 8px 8px;}
+.element-signal-grid button {min-width: 0; padding-inline: 4px; overflow: hidden; font-size: 11px; text-align: center; text-overflow: ellipsis; white-space: nowrap;}
 
 .property-section {margin-bottom: 24px;}
 .property-section h3 {margin: 0 0 12px; padding-bottom: 5px; border-bottom: 3px solid var(--ink); font-size: 13px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;}

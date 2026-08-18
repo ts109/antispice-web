@@ -3,7 +3,7 @@ import {acConfiguration, compileACSimulation, createACState, runACSweeps} from "
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=16";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
-import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=6";
+import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=7";
 import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
 import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=2";
 
@@ -568,10 +568,10 @@ function refreshACPlot() {
         const phase = new Float64Array(result.sampleCount);
         for (let sample = 0; sample < result.sampleCount; ++sample) {
             magnitude[sample] = Math.hypot(real[sample], imaginary[sample]);
-            phase[sample] = Math.atan2(imaginary[sample], real[sample]) * 180 / Math.PI;
+            phase[sample] = Math.atan2(imaginary[sample], real[sample]);
         }
-        traces.push({label: `|${label}|`, unit: `${outputUnit}/${inputUnit}`, values: magnitude});
-        traces.push({label: `∠${label}`, unit: "°", values: phase});
+        traces.push({label: `|${label}|`, unit: `${outputUnit}/${inputUnit}`, values: magnitude, scale: "log-if-positive"});
+        traces.push({label: `∠${label}`, unit: "rad", values: phase});
     };
     for (const net of application.ac.visibleNets) {
         const index = layout.potentials[net];
@@ -1743,7 +1743,7 @@ function renderLists() {
             group.dataset.reference = element.reference;
             group.open = expandedElements.has(element.reference);
             name.className = "simulation-element-name";
-            ports.className = "simulation-signals";
+            ports.className = "element-signal-grid";
             name.textContent = `${element.reference} · ${element.use}`;
             const model = resolveModel(element.use);
             const choices = [];
@@ -2051,7 +2051,7 @@ function renderSimulationProperties() {
         controls.append(result);
     }
 
-    const active = propertySection("Displayed signals", "simulation-signals");
+    const active = propertySection("Displayed signals");
     appendDisplayedSignals(application.transient, active);
 }
 
@@ -2137,7 +2137,7 @@ function renderACProperties() {
 
     const selectedInput = propertySection("Selected input");
     selectedInput.append(application.ac.selectedInput ?? "Select an AC marker in the schematic or input list.");
-    appendDisplayedSignals(application.ac, propertySection("Displayed signals", "simulation-signals"));
+    appendDisplayedSignals(application.ac, propertySection("Displayed signals"));
 }
 
 function propertySection(title, className = "") {
