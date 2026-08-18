@@ -1,6 +1,7 @@
 import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=2";
 import {acConfiguration, compileACSimulation, createACState, runACSweeps} from "./ac.js?v=1";
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=16";
+import {initializeLandingPage} from "./landing.js?v=1";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
 import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=7";
@@ -148,6 +149,13 @@ const application = {
     acCompilation: {state: "idle", message: "", solver: null},
     ac: createACState(),
 };
+
+initializeLandingPage({
+    onEditorShown() {
+        resizeViewport();
+        transientPlot.refreshLayout();
+    },
+});
 
 function activeAnalysis() {
     return application.mode === "ac" ? application.ac : application.transient;

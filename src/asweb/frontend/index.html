@@ -3,13 +3,82 @@
 <head>
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
-<link rel="stylesheet" href="./styles.css?v=21">
+<link rel="stylesheet" href="./styles.css?v=24">
 </head>
 
-<body>
+<body data-view="landing">
+
+<main id="landingPage" aria-labelledby="landingTitle">
+    <header class="landing-masthead">
+        <p class="landing-kicker">Circuit modelling · compilation · simulation</p>
+        <h1 id="landingTitle"><span>ANTI</span><span>SPICE</span></h1>
+        <p class="landing-edition">WEB / EXPERIMENTAL</p>
+        <button id="enterEditor" class="landing-primary" type="button">Open schematic editor →</button>
+    </header>
+
+    <section class="landing-hello" aria-labelledby="helloHeading">
+        <p class="landing-index">00 / ABOUT</p>
+        <div>
+            <h2 id="helloHeading">About.</h2>
+            <div class="landing-about-copy">
+                <p class="landing-about-lead">ANTISPICE is a lightweight, portable, and customizable circuit simulator.</p>
+                <div class="landing-about-columns">
+                    <p>It offers a clean Python API as well as a web service for interactive use, making it ideal for those who want to learn and experiment.</p>
+                    <p>It relies heavily on code-generation techniques and simulates with the stiffly accurate Radau-IIA method. ANTISPICE prioritizes elegance and flexibility rather than interoperability with legacy tools.</p>
+                </div>
+                <p class="landing-about-purpose">An educational and research tool—not a traditional EDA suite. Contributions and feedback are welcome.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="landing-explainer" aria-labelledby="explainerHeading">
+        <div class="landing-section-heading">
+            <p class="landing-index">01 / HOW IT WORKS</p>
+            <h2 id="explainerHeading">A circuit laboratory in the browser.</h2>
+        </div>
+        <ul class="landing-capabilities">
+            <li><small>Models / parts / circuits</small><strong>Model-driven</strong><span>Compose circuits from readable model and part libraries. Parameters resolve from part defaults to instance overrides, while equations and named internal quantities remain inspectable.</span></li>
+            <li><small>Symbolic → WebAssembly</small><strong>Compiled solvers</strong><span>The Python core turns each circuit's equations into a compact numerical solver. WebAssembly then runs the actual analysis responsively inside the browser.</span></li>
+            <li><small>Nonlinear / transient / AC</small><strong>Useful analysis</strong><span>Solve operating points, adaptive implicit transients, and linearized small-signal frequency responses. Select net, port, and model-defined signals directly from the schematic.</span></li>
+        </ul>
+        <p class="landing-invitation"><strong>No specialist workflow required.</strong> Open the editor, draw something, and inspect what happens. The details remain available when you want them.</p>
+    </section>
+
+    <section class="landing-information" aria-label="Project information">
+        <article class="landing-card landing-free">
+            <p class="landing-index">02 / ACCESS</p>
+            <h2>Free for everyone.</h2>
+            <p>Antispice is free and open-source software. Use it, study it, change it, and share it under the MIT License.</p>
+        </article>
+        <article class="landing-card">
+            <p class="landing-index">03 / SOURCE</p>
+            <h2>Repositories</h2>
+            <a href="https://github.com/ts109/antispice" target="_blank" rel="noreferrer">Core / antispice ↗</a>
+            <a href="https://github.com/ts109/antispice-web" target="_blank" rel="noreferrer">Web / antispice-web ↗</a>
+        </article>
+        <article class="landing-card">
+            <p class="landing-index">04 / CONTACT</p>
+            <h2>Tillmann Stübler</h2>
+            <a href="mailto:ts109@pm.me">ts109@pm.me</a>
+            <p>Questions, ideas, experiments, and bug reports are welcome.</p>
+        </article>
+        <article class="landing-card landing-privacy">
+            <p class="landing-index">05 / POLICY</p>
+            <h2>No cookies.<br>No tracking.</h2>
+            <p>The application does not use cookies or behavioral tracking. Schematics saved by the editor remain in your browser's local storage.</p>
+        </article>
+    </section>
+
+    <footer class="landing-footer">
+        <span>© 2026 Tillmann Stübler</span>
+        <a href="./LICENSE.txt" target="_blank" rel="license">MIT License ↗</a>
+        <button id="enterEditorFooter" type="button">Enter editor →</button>
+    </footer>
+</main>
 
 <aside id="toolbar" aria-label="Editor controls">
     <h1><span>ANTISPICE</span><em>WEB</em></h1>
+    <button id="showLanding" type="button">About</button>
     <section id="schematicControls" aria-labelledby="schematicHeading">
         <h2 id="schematicHeading">Schematic</h2>
         <label class="visually-hidden" for="schematicName">Schematic name</label>
@@ -107,6 +176,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=46"></script>
+<script type="module" src="./editor.js?v=47"></script>
 </body>
 </html>

@@ -9,6 +9,20 @@ import unittest
 class FrontendCircuitTest(unittest.TestCase):
     """Exercise mutations that must preserve wire endpoint integrity."""
 
+    def test_landing_page_is_initial_and_links_project_identity(self) -> None:
+        """The initial document exposes the project card before the editor."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        document = (frontend / "index.html").read_text()
+
+        self.assertIn('<body data-view="landing">', document)
+        self.assertIn('id="enterEditor"', document)
+        self.assertIn('id="showLanding"', document)
+        self.assertIn("https://github.com/ts109/antispice", document)
+        self.assertIn("https://github.com/ts109/antispice-web", document)
+        self.assertIn("mailto:ts109@pm.me", document)
+        self.assertIn("No cookies", document)
+        self.assertIn("MIT License", document)
+
     def test_detaching_nodes_removes_every_incident_wire_before_cleanup(self) -> None:
         """Multiple wires on one terminal cannot leave a dangling replacement."""
         node = shutil.which("node")
