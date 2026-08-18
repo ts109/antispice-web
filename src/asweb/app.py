@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import antispice
 import uvicorn
+from antispice.circuit import Definition
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -170,7 +171,7 @@ def _cached_response(request: BaseModel, compilation_id: str, compile_operation:
         _compile_slots.release()
 
 
-def _encode_definition(definition: antispice.Definition) -> dict[str, Any]:
+def _encode_definition(definition: Definition) -> dict[str, Any]:
     if isinstance(definition, antispice.Model):
         return {
             "type": "model",
@@ -250,64 +251,32 @@ def _compile_response(
         )
 
     circuit = _run_compile_stage(compilation_id, "request translation", lambda: _make_circuit(request))
-    system = _run_compile_stage(compilation_id, "circuit flattening", lambda: antispice.compile_circuit(circuit))
-    state_size = len(system.state)
+    artifact = _run_compile_stage(
+        compilation_id,
+        "WebAssembly target compilation",
+        lambda: antispice.compile_wasm(circuit, ac_cases=ac_cases),
+    )
+    state_size = artifact.layout.state_size
     logger.info(
-        "compile[%s] equation system states=%d equations=%d newton_unknowns=%d",
+        "compile[%s] solver states=%d newton_unknowns=%d",
         compilation_id,
         state_size,
-        len(system.equations),
         2 * state_size,
-    )
-    step = _run_compile_stage(compilation_id, "Radau discretization", lambda: antispice.discretize_radau_iia(system))
-    function = _run_compile_stage(compilation_id, "residual/Jacobian transpilation", lambda: antispice.transpile_radau_evaluator(step))
-    stationary = _run_compile_stage(compilation_id, "stationary-state transpilation", lambda: antispice.transpile_stationary_evaluator(system))
-    auxiliaries = None
-    if system.auxiliaries:
-        auxiliaries = _run_compile_stage(
-            compilation_id,
-            "auxiliary transpilation",
-            lambda: antispice.transpile_auxiliary_evaluator(system),
-        )
-    ac = _run_compile_stage(compilation_id, "AC linearization transpilation", lambda: antispice.transpile_ac_linearizer(system))
-    ac_auxiliaries = None
-    if system.auxiliaries:
-        ac_auxiliaries = _run_compile_stage(
-            compilation_id,
-            "AC auxiliary linearization transpilation",
-            lambda: antispice.transpile_ac_auxiliary_linearizer(system),
-        )
-    memory = antispice.radau_memory_layout(system)
-    required_pages = max(1, (memory.byte_length + 65_535) // 65_536)
-    wasm = _run_compile_stage(
-        compilation_id,
-        "WebAssembly emission",
-        lambda: antispice.WasmGenerator(memory_pages=required_pages).generate(
-            tuple(item for item in (function, stationary, auxiliaries, ac, ac_auxiliaries, antispice.dense_lu_solve_function()) if item is not None)
-        ),
-    )
-    javascript = _run_compile_stage(
-        compilation_id,
-        "JavaScript wrapper generation",
-        lambda: antispice.generate_javascript_radau_wrapper(system, ac_cases=ac_cases),
     )
     logger.info(
         "compile[%s] completed duration=%.3fs wasm_bytes=%d javascript_bytes=%d",
         compilation_id,
         perf_counter() - started,
-        len(wasm),
-        len(javascript.encode()),
+        len(artifact.module),
+        len(artifact.javascript.encode()),
     )
     return {
-        "wasm": base64.b64encode(wasm).decode("ascii"),
-        "javascript": javascript,
-        "stateSize": len(system.state),
+        "wasm": base64.b64encode(artifact.module).decode("ascii"),
+        "javascript": artifact.javascript,
+        "stateSize": artifact.layout.state_size,
         "layout": {
-            "potentials": system.layout.potentials,
-            "currents": {
-                reference: {port: index for (element, port), index in system.layout.currents.items() if element == reference}
-                for reference in dict.fromkeys(element for element, _ in system.layout.currents)
-            },
+            "potentials": artifact.layout.potentials,
+            "currents": artifact.layout.currents,
         },
     }
 
