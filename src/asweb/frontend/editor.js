@@ -283,18 +283,28 @@ function setMode(mode) {
 }
 
 async function startSimulation() {
-    application.compilation = {state: "working", message: "Compiling circuit…", solver: null};
+    const pendingCompilation = {state: "working", message: "Compiling circuit…", solver: null};
+    application.compilation = pendingCompilation;
     application.transient.state = "idle";
     application.transient.message = "";
     application.transient.result = null;
     transientPlot.setData(null);
+    document.body.setAttribute("aria-busy", "true");
+    updateStatus();
     renderProperties();
     try {
         const runtime = await compileSimulation(generateCompilationElements(resolveModel));
+        if (application.compilation !== pendingCompilation) return;
         application.compilation = {state: "ready", message: `Compiled ${runtime.stateSize} state variables.`, ...runtime};
         refreshTransientPlot();
     } catch (error) {
+        if (application.compilation !== pendingCompilation) return;
         application.compilation = {state: "error", message: error.message, solver: null};
+    } finally {
+        if (application.compilation !== pendingCompilation && application.compilation.state !== "working") {
+            document.body.removeAttribute("aria-busy");
+            updateStatus();
+        }
     }
     if (application.mode === "simulation") renderProperties();
 }
@@ -325,7 +335,25 @@ async function runTransientSimulation() {
 
 function updateStatus() {
     const scale = viewportPixels.width && viewport.width ? viewport.width / viewportPixels.width : 1;
-    statusMode.textContent = application.mode === "edit" ? "EDIT" : "SIMULATE";
+    const compiling = application.compilation.state === "working";
+    statusMode.classList.toggle("compiling", compiling);
+    statusMode.replaceChildren();
+    if (compiling) {
+        statusMode.append("COMPILING");
+        const dots = document.createElement("span");
+        dots.className = "compiling-dots";
+        dots.setAttribute("aria-hidden", "true");
+        for (let index = 0; index < 3; ++index) {
+            const dot = document.createElement("i");
+            dot.textContent = ".";
+            dots.append(dot);
+        }
+        statusMode.append(dots);
+        statusMode.setAttribute("aria-label", "Compiling circuit");
+    } else {
+        statusMode.textContent = application.mode === "edit" ? "EDIT" : "SIMULATE";
+        statusMode.removeAttribute("aria-label");
+    }
     statusZoom.textContent = `${Math.round(100 / scale)}%`;
     statusElements.textContent = circuit.elements.size;
     statusNets.textContent = circuit.nets.size;

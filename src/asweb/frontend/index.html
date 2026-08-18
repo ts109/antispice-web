@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
-<link rel="stylesheet" href="./styles.css?v=17">
+<link rel="stylesheet" href="./styles.css?v=19">
 </head>
 
 <body>
@@ -90,7 +90,7 @@
 </aside>
 
 <footer id="statusStrip" aria-label="Editor status">
-    <strong id="statusMode">EDIT</strong>
+    <strong id="statusMode" role="status" aria-live="polite">EDIT</strong>
     <span>ZOOM <output id="statusZoom">100%</output></span>
     <span>ELEMENTS <output id="statusElements">0</output></span>
     <span>NETS <output id="statusNets">0</output></span>
@@ -99,6 +99,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=40"></script>
+<script type="module" src="./editor.js?v=42"></script>
 </body>
 </html>

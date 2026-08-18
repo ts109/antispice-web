@@ -131,6 +131,13 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
 #statusStrip {grid-column: 1 / -1; grid-row: 2; display: flex; align-items: stretch; min-width: 0; border-top: 4px solid var(--ink); background: var(--ink); color: var(--white); font-size: 11px; font-weight: 700; letter-spacing: .04em;}
 #statusStrip > * {display: flex; align-items: center; padding: 0 12px; border-right: 2px solid #555; white-space: nowrap;}
 #statusMode {min-width: 110px; background: var(--acid); color: var(--ink); font-family: var(--display); font-size: 16px; letter-spacing: .08em;}
+#statusMode.compiling {min-width: 150px; background: var(--red); color: var(--white);}
+.compiling-dots {display: inline-flex; min-width: 18px;}
+.compiling-dots i {font-style: normal; animation: compiling-dot 900ms infinite;}
+.compiling-dots i:nth-child(2) {animation-delay: 150ms;}
+.compiling-dots i:nth-child(3) {animation-delay: 300ms;}
+@keyframes compiling-dot {0%, 30% {opacity: 0;} 50%, 100% {opacity: 1;}}
+@media (prefers-reduced-motion: reduce) {.compiling-dots i {animation: none;}}
 #statusStrip output {margin-left: 6px; color: var(--acid); font-weight: 900;}
 #licenseNotice {margin-left: auto; color: #aaa; font-size: 9px; text-decoration: none;}
 #licenseNotice:hover {color: var(--acid);}
