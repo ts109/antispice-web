@@ -1,6 +1,6 @@
 import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=2";
 import {acConfiguration, compileACSimulation, createACState, runACSweeps} from "./ac.js?v=1";
-import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=16";
+import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=18";
 import {initializeLandingPage} from "./landing.js?v=1";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
@@ -1944,7 +1944,11 @@ function renderProperties() {
                 element.parameters[name] = Number.isNaN(numeric) ? text : numeric;
             }
             refreshElementSymbol(element);
-            renderProperties();
+            const overriddenNow = Object.hasOwn(element.parameters, name);
+            const currentValue = overriddenNow ? element.parameters[name] : inheritedValue;
+            source.textContent = overriddenNow ? "instance override" : inheritedValue !== undefined ? "part value" : "missing";
+            row.classList.toggle("parameter-missing", currentValue === undefined);
+            input.toggleAttribute("aria-invalid", currentValue === undefined);
         };
         appendProperty(name, value, null, null, parameters, "", false);
         const row = parameters.lastElementChild;

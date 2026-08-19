@@ -166,6 +166,8 @@ body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, 
 .element.selected .symbol {stroke: var(--blue); stroke-width: 3.5;}
 .reference-label {fill: var(--ink); font-size: 14px; font-weight: 700; pointer-events: none; user-select: none;}
 .element.selected .reference-label {fill: var(--blue);}
+.opamp-sign {fill: var(--ink); font-size: 18px; font-weight: 900; pointer-events: none; user-select: none;}
+.element.selected .opamp-sign {fill: var(--blue);}
 .port-visible {fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; pointer-events: none;}
 .port-visible.signal-active {display: initial !important; fill: var(--blue); stroke: var(--ink); stroke-width: 3;}
 .port-hit {fill: transparent; stroke: none; cursor: crosshair;}

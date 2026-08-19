@@ -22,6 +22,17 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("mailto:ts109@pm.me", document)
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
+        self.assertIn('href="./styles.css?v=25"', document)
+        self.assertIn('src="./editor.js?v=49"', document)
+
+    def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
+        """Native Tab navigation survives committing a parameter edit."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        editor = (frontend / "editor.js").read_text()
+        update_start = editor.index("        const update = input => {")
+        update_end = editor.index("        };", update_start)
+        self.assertNotIn("renderProperties()", editor[update_start:update_end])
+        self.assertIn("source.textContent", editor[update_start:update_end])
 
     def test_detaching_nodes_removes_every_incident_wire_before_cleanup(self) -> None:
         """Multiple wires on one terminal cannot leave a dangling replacement."""
@@ -70,6 +81,29 @@ const {library} = await import(process.argv[1]);
 if (library.ACV?.kind !== "marker" || library.ACV?.acInputType !== "voltage") process.exit(1);
 if (library.ACI?.kind !== "marker" || library.ACI?.acInputType !== "current") process.exit(2);
 if (typeof library.ACV.draw !== "function" || typeof library.ACI.draw !== "function") process.exit(3);
+"""
+        subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
+
+    def test_opamp_uses_a_dedicated_four_terminal_symbol(self) -> None:
+        """The op-amp model has conventional signal, output, and supply pins."""
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required to test frontend symbols"
+            raise unittest.SkipTest(message)
+        module = pathlib.Path(__file__).parents[1] / "src/asweb/frontend/library.js"
+        source = """
+const {library, modelPresentation} = await import(process.argv[1]);
+const presentation = modelPresentation("opamp-slew-limited");
+if (presentation?.symbol !== "opamp") process.exit(1);
+if (library.opamp?.referencePrefix !== "A") process.exit(2);
+const ports = Object.fromEntries(library.opamp.ports.map(port => [port.name, port]));
+if (Object.keys(ports).length !== 5) process.exit(3);
+if (!(ports.inverting.x < 0 && ports.inverting.y < 0)) process.exit(4);
+if (!(ports.noninverting.x < 0 && ports.noninverting.y > 0)) process.exit(5);
+if (!(ports.output.x > 0 && ports.output.y === 0)) process.exit(6);
+if (!(ports.negative_supply.x === 0 && ports.negative_supply.y > 0)) process.exit(7);
+if (!(ports.positive_supply.x === 0 && ports.positive_supply.y < 0)) process.exit(8);
+if (typeof library.opamp.draw !== "function") process.exit(9);
 """
         subprocess.run([node, "--input-type=module", "--eval", source, module.as_uri()], check=True)
 

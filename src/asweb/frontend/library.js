@@ -6,6 +6,7 @@ const modelPresentations = {
     inductor: {displayName: "Inductor", symbol: "inductor"},
     "voltage-source": {displayName: "Voltage source", symbol: "voltage-source"},
     "current-source": {displayName: "Current source", symbol: "current-source"},
+    "opamp-slew-limited": {displayName: "Op-amp · slew limited", symbol: "opamp"},
 };
 
 const modelFamilies = [
@@ -162,6 +163,38 @@ function fetDefinition(p) {
     };
 }
 
+function opampDefinition() {
+    return {
+        referencePrefix: "A",
+        labelPosition: {x: 18, y: -42},
+        parameters: {},
+        hitBox: {x: -52, y: -52, width: 104, height: 104},
+        ports: [
+            {name: "negative_supply", x: 0, y: 50, axis: "v"},
+            {name: "positive_supply", x: 0, y: -50, axis: "v"},
+            {name: "noninverting", x: -50, y: 20, axis: "h"},
+            {name: "inverting", x: -50, y: -20, axis: "h"},
+            {name: "output", x: 50, y: 0, axis: "h"},
+        ],
+        draw(g) {
+            addLine(g, -50, -20, -30, -20);
+            addLine(g, -50, 20, -30, 20);
+            addLine(g, 30, 0, 50, 0);
+            addLine(g, 0, -18, 0, -50);
+            addLine(g, 0, 18, 0, 50);
+            addPath(g, "M -30 -36 L -30 36 L 30 0 Z");
+
+            const inverting = svgElement("text", {x: -23, y: -14, "text-anchor": "middle"});
+            const noninverting = svgElement("text", {x: -23, y: 26, "text-anchor": "middle"});
+            inverting.classList.add("opamp-sign");
+            noninverting.classList.add("opamp-sign");
+            inverting.textContent = "−";
+            noninverting.textContent = "+";
+            g.append(inverting, noninverting);
+        },
+    };
+}
+
 export const library = {
     resistor: {
         referencePrefix: "R",
@@ -219,6 +252,7 @@ export const library = {
     "pnp-bjt": transistorDefinition(false),
     "n-fet": fetDefinition(false),
     "p-fet": fetDefinition(true),
+    opamp: opampDefinition(),
     GND: {
         kind: "marker",
         hitBox: {x: -20, y: -35, width: 40, height: 52},
