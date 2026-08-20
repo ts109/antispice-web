@@ -140,6 +140,8 @@ let segmentDrag = null;
 let junctionDrag = null;
 let viewport = {x: 0, y: 0, width: 0, height: 0};
 let viewportPixels = {width: 0, height: 0};
+const touchPointers = new Map();
+let pinch = null;
 const ZOOM_FACTORS = [15, 18, 22, 27, 33, 39, 47, 56, 68, 82, 100, 120, 150, 180, 220, 270, 330, 390];
 const application = {
     mode: "edit",
@@ -736,6 +738,70 @@ loadLibrary().then(() => {
 // ============================================================================
 
 new ResizeObserver(() => resizeViewport()).observe(svg);
+
+function pinchDistance([first, second]) {
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
+function pinchMidpoint([first, second]) {
+    return svgPoint({
+        clientX: (first.clientX + second.clientX) / 2,
+        clientY: (first.clientY + second.clientY) / 2,
+    });
+}
+
+function startPinch() {
+    const pointers = [...touchPointers.values()];
+    if (pointers.length !== 2 || !viewportPixels.width || !viewport.width) return;
+    pinch = {distance: pinchDistance(pointers)};
+    draggingElement = null;
+    draggingMarker = null;
+    segmentDrag = null;
+    junctionDrag = null;
+    drawingWire = null;
+    renderOverlay();
+}
+
+function updatePinch() {
+    const pointers = [...touchPointers.values()];
+    if (!pinch || pointers.length !== 2) return;
+    const distance = pinchDistance(pointers);
+    if (!(distance > 0 && pinch.distance > 0)) return;
+    const currentScale = viewport.width / viewportPixels.width;
+    const nextScale = Math.min(100 / ZOOM_FACTORS[0], Math.max(100 / ZOOM_FACTORS.at(-1), currentScale * pinch.distance / distance));
+    const ratio = nextScale / currentScale;
+    const point = pinchMidpoint(pointers);
+    viewport.x = point.x - (point.x - viewport.x) * ratio;
+    viewport.y = point.y - (point.y - viewport.y) * ratio;
+    viewport.width = viewportPixels.width * nextScale;
+    viewport.height = viewportPixels.height * nextScale;
+    pinch.distance = distance;
+    updateViewBox();
+}
+
+svg.addEventListener("pointerdown", event => {
+    if (event.pointerType !== "touch") return;
+    touchPointers.set(event.pointerId, event);
+    svg.setPointerCapture(event.pointerId);
+    if (touchPointers.size === 2) startPinch();
+}, true);
+
+svg.addEventListener("pointermove", event => {
+    if (!touchPointers.has(event.pointerId)) return;
+    touchPointers.set(event.pointerId, event);
+    if (!pinch) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    updatePinch();
+}, true);
+
+function finishTouchPointer(event) {
+    touchPointers.delete(event.pointerId);
+    if (touchPointers.size < 2) pinch = null;
+}
+
+svg.addEventListener("pointerup", finishTouchPointer, true);
+svg.addEventListener("pointercancel", finishTouchPointer, true);
 
 svg.addEventListener("wheel", event => {
     event.preventDefault();

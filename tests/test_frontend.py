@@ -22,8 +22,9 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("mailto:ts109@pm.me", document)
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
+        self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
         self.assertIn('href="./styles.css?v=33"', document)
-        self.assertIn('src="./editor.js?v=53"', document)
+        self.assertIn('src="./editor.js?v=54"', document)
 
     def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
         """Empty-grid taps add bends that are retained when a wire is completed."""
@@ -72,6 +73,16 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn('window.addEventListener("resize", () => this.refreshLayout())', plot)
         self.assertNotIn("canvas.style.width", plot)
         self.assertNotIn("canvas.style.height", plot)
+
+    def test_editor_supports_two_finger_pinch_zoom(self) -> None:
+        """Touch pointers drive a midpoint-anchored zoom without mouse changes."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        editor = (frontend / "editor.js").read_text()
+
+        self.assertIn("const touchPointers = new Map();", editor)
+        self.assertIn("function startPinch()", editor)
+        self.assertIn("function updatePinch()", editor)
+        self.assertIn('svg.addEventListener("pointerdown", event => {', editor)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""
