@@ -24,7 +24,7 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
         self.assertIn('href="./styles.css?v=33"', document)
-        self.assertIn('src="./editor.js?v=54"', document)
+        self.assertIn('src="./editor.js?v=55"', document)
 
     def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
         """Empty-grid taps add bends that are retained when a wire is completed."""
@@ -83,6 +83,17 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("function startPinch()", editor)
         self.assertIn("function updatePinch()", editor)
         self.assertIn('svg.addEventListener("pointerdown", event => {', editor)
+        self.assertIn("let editorPan = null;", editor)
+        self.assertIn("editorPan = {pointerId: event.pointerId", editor)
+
+    def test_plot_supports_touch_pan_and_pinch_zoom(self) -> None:
+        """Plots retain one-finger panning and add two-finger time-axis zooming."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        plot = (frontend / "plot.js").read_text()
+
+        self.assertIn("trackTouchStart(event)", plot)
+        self.assertIn("trackTouchMove(event)", plot)
+        self.assertIn("function touchDistance([first, second])", plot)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

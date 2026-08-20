@@ -15,6 +15,8 @@ export class TransientPlot {
         this.frame = null;
         this.layoutFrame = null;
         this.canvasSize = null;
+        this.touchPointers = new Map();
+        this.pinch = null;
         this.downsampleScratch = [];
         this.horizontal = {label: "TIME / s", format: formatTime, ticks: axisTicks};
         this.resizeObserver = new ResizeObserver(() => this.refreshLayout());
@@ -22,6 +24,10 @@ export class TransientPlot {
         this.resizeObserver.observe(root);
         window.addEventListener("resize", () => this.refreshLayout());
         window.visualViewport?.addEventListener("resize", () => this.refreshLayout());
+        this.interaction.addEventListener("pointerdown", event => this.trackTouchStart(event), true);
+        this.interaction.addEventListener("pointermove", event => this.trackTouchMove(event), true);
+        this.interaction.addEventListener("pointerup", event => this.trackTouchEnd(event), true);
+        this.interaction.addEventListener("pointercancel", event => this.trackTouchEnd(event), true);
         this.interaction.addEventListener("wheel", event => this.zoom(event), {passive: false});
         this.interaction.addEventListener("pointerdown", event => this.beginPan(event));
         this.interaction.addEventListener("pointermove", event => this.pointerMove(event));
@@ -383,8 +389,44 @@ export class TransientPlot {
         this.setView(anchorTime - anchor * nextDuration, anchorTime + (1 - anchor) * nextDuration);
     }
 
+    trackTouchStart(event) {
+        if (event.pointerType !== "touch") return;
+        this.touchPointers.set(event.pointerId, event);
+        this.interaction.setPointerCapture(event.pointerId);
+        if (this.touchPointers.size !== 2 || !this.view) return;
+        const pointers = [...this.touchPointers.values()];
+        this.pinch = {distance: touchDistance(pointers)};
+        this.drag = null;
+    }
+
+    trackTouchMove(event) {
+        if (!this.touchPointers.has(event.pointerId)) return;
+        this.touchPointers.set(event.pointerId, event);
+        if (!this.pinch || this.touchPointers.size !== 2) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const pointers = [...this.touchPointers.values()];
+        const distance = touchDistance(pointers);
+        if (!(distance > 0 && this.pinch.distance > 0)) return;
+        const bounds = this.interaction.getBoundingClientRect();
+        const geometry = this.geometry();
+        const x = (pointers[0].clientX + pointers[1].clientX) / 2 - bounds.left;
+        const anchor = Math.max(0, Math.min(1, (x - geometry.left) / geometry.plotWidth));
+        const fullDuration = this.data.times[this.data.sampleCount - 1] - this.data.times[0];
+        const duration = this.view.end - this.view.start;
+        const nextDuration = Math.max(fullDuration / Math.max(1, this.data.sampleCount - 1), Math.min(fullDuration, duration * this.pinch.distance / distance));
+        const anchorTime = this.view.start + anchor * duration;
+        this.pinch.distance = distance;
+        this.setView(anchorTime - anchor * nextDuration, anchorTime + (1 - anchor) * nextDuration);
+    }
+
+    trackTouchEnd(event) {
+        this.touchPointers.delete(event.pointerId);
+        if (this.touchPointers.size < 2) this.pinch = null;
+    }
+
     beginPan(event) {
-        if (!this.view) return;
+        if (!this.view || this.pinch || event.pointerType === "touch" && this.touchPointers.size > 1) return;
         this.interaction.setPointerCapture(event.pointerId);
         this.drag = {pointerId: event.pointerId, x: event.clientX, start: this.view.start, end: this.view.end};
     }
@@ -433,6 +475,10 @@ function nearestIndex(values, count, target) {
     }
     if (low > 0 && Math.abs(values[low - 1] - target) < Math.abs(values[low] - target)) return low - 1;
     return low;
+}
+
+function touchDistance([first, second]) {
+    return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
 }
 
 function traceValue(data, trace, sample) {

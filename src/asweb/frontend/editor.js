@@ -4,7 +4,7 @@ import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelP
 import {initializeLandingPage} from "./landing.js?v=1";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
-import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=9";
+import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=10";
 import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
 import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=2";
 
@@ -138,6 +138,7 @@ let draggingElement = null;
 let draggingMarker = null;
 let segmentDrag = null;
 let junctionDrag = null;
+let editorPan = null;
 let viewport = {x: 0, y: 0, width: 0, height: 0};
 let viewportPixels = {width: 0, height: 0};
 const touchPointers = new Map();
@@ -754,6 +755,7 @@ function startPinch() {
     const pointers = [...touchPointers.values()];
     if (pointers.length !== 2 || !viewportPixels.width || !viewport.width) return;
     pinch = {distance: pinchDistance(pointers)};
+    editorPan = null;
     draggingElement = null;
     draggingMarker = null;
     segmentDrag = null;
@@ -832,6 +834,17 @@ svg.addEventListener(
         const raw = svgPoint(event);
         const p = snapPoint(raw);
 
+        if (editorPan?.pointerId === event.pointerId) {
+            const scale = viewport.width / viewportPixels.width;
+            const dx = event.clientX - editorPan.x;
+            const dy = event.clientY - editorPan.y;
+            editorPan.moved ||= Math.hypot(dx, dy) > 3;
+            viewport.x = editorPan.startX - dx * scale;
+            viewport.y = editorPan.startY - dy * scale;
+            updateViewBox();
+            return;
+        }
+
         mousePosition = p;
 
         // --------------------------------------------------
@@ -905,6 +918,12 @@ svg.addEventListener("pointerdown", event => {
         if (event.target !== svg)
             return;
 
+        if (event.pointerType === "touch" && !placingType && !drawingWire && !pinch) {
+            editorPan = {pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: viewport.x, startY: viewport.y, moved: false};
+            svg.setPointerCapture(event.pointerId);
+            return;
+        }
+
         if (application.mode !== "edit") {
             return;
         }
@@ -953,6 +972,8 @@ svg.addEventListener("pointerdown", event => {
 
 
 window.addEventListener("pointerup", () => {
+        if (editorPan && !editorPan.moved && application.mode === "edit") select(null);
+        editorPan = null;
         if (application.mode !== "edit") {
             return;
         }
