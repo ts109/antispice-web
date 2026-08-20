@@ -23,8 +23,11 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=35"', document)
+        self.assertIn('href="./styles.css?v=36"', document)
         self.assertIn('src="./editor.js?v=56"', document)
+        self.assertIn('id="manualHeading"', document)
+        self.assertIn("The useful gestures.", document)
+        self.assertNotIn("No specialist workflow required", document)
 
     def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
         """Empty-grid taps add bends that are retained when a wire is completed."""

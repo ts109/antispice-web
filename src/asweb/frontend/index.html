@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ANTISPICE WEB — Schematic Editor</title>
 <link rel="icon" href="./favicon.ico" sizes="any">
-<link rel="stylesheet" href="./styles.css?v=35">
+<link rel="stylesheet" href="./styles.css?v=36">
 </head>
 
 <body data-view="landing">
@@ -43,29 +43,42 @@
             <li><small>Symbolic → WebAssembly</small><strong>Compiled solvers</strong><span>The Python core turns each circuit's equations into a compact numerical solver. WebAssembly then runs the actual analysis responsively inside the browser.</span></li>
             <li><small>Nonlinear / transient / AC</small><strong>Useful analysis</strong><span>Solve operating points, adaptive implicit transients, and linearized small-signal frequency responses. Select net, port, and model-defined signals directly from the schematic.</span></li>
         </ul>
-        <p class="landing-invitation"><strong>No specialist workflow required.</strong> Open the editor, draw something, and inspect what happens. The details remain available when you want them.</p>
+    </section>
+
+    <section class="landing-manual-section" aria-labelledby="manualHeading">
+        <div class="landing-section-heading">
+            <p class="landing-index">02 / QUICK MANUAL</p>
+            <h2 id="manualHeading">The useful gestures.</h2>
+        </div>
+        <dl class="landing-manual">
+            <div><dt>Navigate</dt><dd>Drag empty canvas to pan. Pinch or use the wheel to zoom. Plots use the same gestures; <strong>Fit</strong> resets their view.</dd></div>
+            <div><dt>Place + wire</dt><dd>Choose a component, then tap once to place it. Tap a port to begin a wire, tap the grid for bends, and tap a port or wire to finish.</dd></div>
+            <div><dt>Select + edit</dt><dd>Tap an object to select it; drag to move it. Selected ports stay visible. Use the contextual actions or keyboard to duplicate and delete.</dd></div>
+            <div><dt>Analyze</dt><dd>Choose <strong>Simulate</strong> or <strong>AC</strong>, select signals on the schematic or in the lists, configure the analysis, then run it.</dd></div>
+        </dl>
+        <p class="landing-shortcuts"><strong>Keyboard</strong><span><kbd>Ctrl/Cmd Z</kbd> undo</span><span><kbd>Ctrl/Cmd D</kbd> duplicate</span><span><kbd>Arrows</kbd> move</span><span><kbd>[ ]</kbd> rotate</span><span><kbd>Del</kbd> delete</span><span><kbd>Esc</kbd> cancel</span></p>
     </section>
 
     <section class="landing-information" aria-label="Project information">
         <article class="landing-card landing-free">
-            <p class="landing-index">02 / ACCESS</p>
+            <p class="landing-index">03 / ACCESS</p>
             <h2>Free for everyone.</h2>
             <p>Antispice is free and open-source software. Use it, study it, change it, and share it under the MIT License.</p>
         </article>
         <article class="landing-card">
-            <p class="landing-index">03 / SOURCE</p>
+            <p class="landing-index">04 / SOURCE</p>
             <h2>Repositories</h2>
             <a href="https://github.com/ts109/antispice" target="_blank" rel="noreferrer">Core / antispice ↗</a>
             <a href="https://github.com/ts109/antispice-web" target="_blank" rel="noreferrer">Web / antispice-web ↗</a>
         </article>
         <article class="landing-card">
-            <p class="landing-index">04 / CONTACT</p>
+            <p class="landing-index">05 / CONTACT</p>
             <h2>Tillmann Stübler</h2>
             <a href="mailto:ts109@pm.me">ts109@pm.me</a>
             <p>Questions, ideas, experiments, and bug reports are welcome.</p>
         </article>
         <article class="landing-card landing-privacy">
-            <p class="landing-index">05 / POLICY</p>
+            <p class="landing-index">06 / POLICY</p>
             <h2>No cookies.<br>No tracking.</h2>
             <p>The application does not use cookies or behavioral tracking. Schematics saved by the editor remain in your browser's local storage.</p>
         </article>
