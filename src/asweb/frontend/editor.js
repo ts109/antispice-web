@@ -31,7 +31,9 @@ const elementsHeading = document.querySelector("#elementsHeading");
 const netsHeading = document.querySelector("#netsHeading");
 const propertiesHeading = document.querySelector("#propertiesHeading");
 const plotHeading = document.querySelector("#plotHeading");
+const plotFitButton = document.querySelector("#plotFit");
 const componentTools = document.querySelector("#componentTools");
+const componentFilter = document.querySelector("#componentFilter");
 const statusMode = document.querySelector("#statusMode");
 const statusZoom = document.querySelector("#statusZoom");
 const statusElements = document.querySelector("#statusElements");
@@ -45,9 +47,66 @@ const newSchematicButton = document.querySelector("#newSchematic");
 const saveSchematicButton = document.querySelector("#saveSchematic");
 const loadSchematicButton = document.querySelector("#loadSchematic");
 const deleteSelectionButtons = document.querySelectorAll("[data-delete-selection]");
+const duplicateSelectionButtons = document.querySelectorAll("[data-duplicate-selection]");
+const undoButton = document.querySelector('[data-history="undo"]');
+const redoButton = document.querySelector('[data-history="redo"]');
+const selectionSummary = document.querySelector("#selectionSummary");
+const properties = document.querySelector("#properties");
+const togglePropertiesButton = document.querySelector("#toggleProperties");
 
 const schematicStore = new SchematicStore(localStorage);
 let saveTimer = null;
+let historyTimer = null;
+let history = [];
+let historyIndex = -1;
+
+function snapshotSignature(snapshot) {
+    return JSON.stringify(snapshot);
+}
+
+function updateHistoryControls() {
+    undoButton.disabled = application.mode !== "edit" || historyIndex <= 0;
+    redoButton.disabled = application.mode !== "edit" || historyIndex >= history.length - 1;
+}
+
+function commitHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    if (!application.libraryReady) return;
+    const snapshot = serializeCircuit();
+    const signature = snapshotSignature(snapshot);
+    if (historyIndex >= 0 && history[historyIndex].signature === signature) return;
+    history.splice(historyIndex + 1);
+    history.push({snapshot, signature});
+    if (history.length > 100) history.shift();
+    historyIndex = history.length - 1;
+    updateHistoryControls();
+}
+
+function resetHistory() {
+    clearTimeout(historyTimer);
+    const snapshot = serializeCircuit();
+    history = [{snapshot, signature: snapshotSignature(snapshot)}];
+    historyIndex = 0;
+    updateHistoryControls();
+}
+
+function restoreHistory(index) {
+    if (index < 0 || index >= history.length) return;
+    historyIndex = index;
+    displayCircuitSnapshot(history[index].snapshot);
+    saveActiveSchematic();
+    updateHistoryControls();
+}
+
+function undo() {
+    commitHistory();
+    restoreHistory(historyIndex - 1);
+}
+
+function redo() {
+    restoreHistory(historyIndex + 1);
+}
 
 function writeSchematicStore() {
     try {
@@ -81,6 +140,8 @@ function saveActiveSchematic() {
 
 function scheduleSchematicSave() {
     if (!application?.libraryReady) return;
+    clearTimeout(historyTimer);
+    historyTimer = setTimeout(commitHistory, 300);
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
         saveTimer = null;
@@ -118,6 +179,7 @@ function loadStoredSchematic(id) {
     if (!record) return;
     if (application.mode !== "edit") setMode("edit");
     displayCircuitSnapshot(record.circuit);
+    resetHistory();
     writeSchematicStore();
     renderSchematicControls();
 }
@@ -187,15 +249,18 @@ function bindToolButton(button) {
 
 function rebuildComponentTools() {
     componentTools.replaceChildren();
+    const filter = componentFilter.value.trim().toLowerCase();
     for (const [name, definition] of Object.entries(availableDefinitions())) {
         if (definition.type === "part") continue;
         const button = document.createElement("button");
         const label = document.createElement("span");
         const reference = document.createElement("small");
         const resolvedName = resolveModelName(name);
+        const displayName = definitionDisplayName(name, definition, resolvedName);
+        if (filter && !`${displayName} ${name}`.toLowerCase().includes(filter)) continue;
         button.type = "button";
         button.dataset.tool = name;
-        label.textContent = definitionDisplayName(name, definition, resolvedName);
+        label.textContent = displayName;
         label.className = "component-name";
         reference.textContent = name;
         reference.className = "component-reference";
@@ -280,6 +345,23 @@ function updateToolbar() {
     for (const button of deleteSelectionButtons) {
         button.disabled = application.mode !== "edit" || !deletableKinds.has(selected?.kind);
     }
+    const duplicable = application.mode === "edit" && (selected?.kind === "element" || selected?.kind === "marker");
+    for (const button of duplicateSelectionButtons) button.disabled = !duplicable;
+    selectionSummary.textContent = selectionDescription();
+    updateHistoryControls();
+}
+
+function selectionDescription() {
+    if (selected?.kind === "element") {
+        const element = circuit.elements.get(selected.id);
+        return element ? `${element.reference} · ${element.use}` : "Nothing selected";
+    }
+    if (selected?.kind === "marker") return circuit.markers.get(selected.id)?.reference ?? "Marker";
+    if (selected?.kind === "wire") return "Wire selected";
+    if (selected?.kind === "waypoint") return "Routing point selected";
+    if (selected?.kind === "junction" || selected?.kind === "node") return "Junction selected";
+    if (selected?.kind === "net") return circuit.nets.get(selected.id)?.name ?? "Net selected";
+    return "Nothing selected";
 }
 
 function setMode(mode) {
@@ -674,6 +756,21 @@ for (const button of deleteSelectionButtons) {
     button.addEventListener("click", () => deleteSelected());
 }
 
+for (const button of duplicateSelectionButtons) {
+    button.addEventListener("click", () => duplicateSelected());
+}
+
+undoButton.addEventListener("click", () => undo());
+redoButton.addEventListener("click", () => redo());
+plotFitButton.addEventListener("click", () => transientPlot.fit());
+componentFilter.addEventListener("input", () => rebuildComponentTools());
+togglePropertiesButton.addEventListener("click", () => {
+    const collapsed = properties.classList.toggle("properties-collapsed");
+    document.body.classList.toggle("properties-collapsed", collapsed);
+    togglePropertiesButton.textContent = collapsed ? "Expand" : "Collapse";
+    togglePropertiesButton.setAttribute("aria-expanded", String(!collapsed));
+});
+
 for (const button of document.querySelectorAll("#toolbar [data-mode]")) {
     button.addEventListener("click", () => setMode(button.dataset.mode));
 }
@@ -688,6 +785,7 @@ newSchematicButton.addEventListener("click", () => {
     saveActiveSchematic();
     const record = schematicStore.create();
     displayCircuitSnapshot(record.circuit);
+    resetHistory();
     writeSchematicStore();
     renderSchematicControls();
 });
@@ -720,9 +818,11 @@ loadLibrary().then(() => {
     const active = schematicStore.active();
     try {
         displayCircuitSnapshot(active.circuit);
+        resetHistory();
     } catch {
         active.circuit = emptyCircuitSnapshot();
         displayCircuitSnapshot(active.circuit);
+        resetHistory();
         writeSchematicStore();
     }
     newSchematicButton.disabled = false;
@@ -999,6 +1099,21 @@ window.addEventListener("keydown", event => {
      */
     if (!document.activeElement?.matches("input, select, textarea, [contenteditable='true']"))
     {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+            event.preventDefault();
+            event.shiftKey ? redo() : undo();
+            return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+            event.preventDefault();
+            redo();
+            return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+            event.preventDefault();
+            duplicateSelected();
+            return;
+        }
         switch (event.key)
         {
             case "Backspace":
@@ -1024,10 +1139,26 @@ window.addEventListener("keydown", event => {
                 break;
 
             case "ArrowLeft":
-                rotateSelected(-90);
+                moveSelected(-GRID * (event.shiftKey ? 5 : 1), 0);
                 break;
 
             case "ArrowRight":
+                moveSelected(GRID * (event.shiftKey ? 5 : 1), 0);
+                break;
+
+            case "ArrowUp":
+                moveSelected(0, -GRID * (event.shiftKey ? 5 : 1));
+                break;
+
+            case "ArrowDown":
+                moveSelected(0, GRID * (event.shiftKey ? 5 : 1));
+                break;
+
+            case "[":
+                rotateSelected(-90);
+                break;
+
+            case "]":
                 rotateSelected(90);
                 break;
         }
@@ -1212,7 +1343,7 @@ function renderMarker(marker) {
     for (const nodeId of marker.ports) {
         const visible = g.querySelector(`.port-visible[data-node-id="${nodeId}"]`);
         visible.classList.toggle("signal-active", application.mode !== "edit" && netVoltageVisible(nodeId));
-        visible.style.display = nodeDegree(nodeId) > 0 ? "none" : "";
+        visible.style.display = selected?.kind === "marker" && selected.id === marker.id || nodeDegree(nodeId) === 0 ? "" : "none";
     }
 }
 
@@ -1339,7 +1470,7 @@ function renderElement(element) {
         visible.classList.toggle("signal-active", application.mode !== "edit" && (
             elementSignalVisible(element, `I:${portName}`) || elementSignalVisible(element, `U:${portName}`)
         ));
-        visible.style.display = nodeDegree(nodeId) > 0 ? "none" : "";
+        visible.style.display = selected?.kind === "element" && selected.id === element.id || nodeDegree(nodeId) === 0 ? "" : "none";
     });
 }
 
@@ -1818,6 +1949,45 @@ function rotateSelected(degrees) {
     selected.kind === "element" ? renderElement(object) : renderMarker(object);
     renderAllWires();
     scheduleSchematicSave();
+}
+
+function moveSelected(dx, dy) {
+    if (application.mode !== "edit" || selected?.kind !== "element" && selected?.kind !== "marker") return;
+    const object = selected.kind === "element" ? circuit.elements.get(selected.id) : circuit.markers.get(selected.id);
+    if (!object) return;
+    object.x += dx;
+    object.y += dy;
+    updateTerminalNodes(object);
+    selected.kind === "element" ? renderElement(object) : renderMarker(object);
+    renderAllWires();
+    scheduleSchematicSave();
+}
+
+function duplicateSelected() {
+    if (application.mode !== "edit") return;
+    if (selected?.kind === "element") {
+        const source = circuit.elements.get(selected.id);
+        if (!source) return;
+        const copy = createElement(source.use, source.x + GRID, source.y + GRID);
+        copy.rotation = source.rotation;
+        copy.parameters = structuredClone(source.parameters);
+        copy.electricalPorts = structuredClone(source.electricalPorts);
+        updateTerminalNodes(copy);
+        renderElement(copy);
+        select({kind: "element", id: copy.id});
+        scheduleSchematicSave();
+        return;
+    }
+    if (selected?.kind === "marker") {
+        const source = circuit.markers.get(selected.id);
+        if (!source) return;
+        const copy = createMarker(source.type, source.x + GRID, source.y + GRID);
+        copy.rotation = source.rotation;
+        updateTerminalNodes(copy);
+        renderMarker(copy);
+        select({kind: "marker", id: copy.id});
+        scheduleSchematicSave();
+    }
 }
 
 

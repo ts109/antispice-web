@@ -91,6 +91,7 @@ body[data-mode="simulation"] .edit-only, body[data-mode="ac"] .edit-only {displa
 .component-name, .component-reference {display: block;}
 .component-name {line-height: 1.15; text-transform: capitalize;}
 .component-reference {margin-top: 4px; color: var(--muted); font-size: 9px; font-weight: 400; line-height: 1.15;}
+#componentFilter {width: 100%; min-width: 0; padding: 6px 7px; border: 2px solid var(--ink); border-radius: 0; background: var(--white); color: var(--ink); font-size: 10px; font-weight: 900; text-transform: uppercase;}
 #componentTools button:hover .component-reference {color: var(--white);}
 #toolbar button:hover:not(:disabled) {background: var(--red); color: var(--white); transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink);}
 #toolbar button:active:not(:disabled) {transform: translate(3px, 3px); box-shadow: none;}
@@ -111,6 +112,7 @@ body[data-mode="ac"] #workspace::after {color: var(--blue); content: "AC";}
 #transientPlot header {display: flex; align-items: center; min-height: 42px; gap: 14px; padding: 6px 10px; color: var(--white); overflow: hidden;}
 #transientPlot header > strong {flex: none; padding: 5px 7px; background: var(--acid); color: var(--ink); font-family: var(--display); font-size: 17px; letter-spacing: .07em;}
 #transientPlot header > span {margin-left: auto; color: #aaa; font-size: 9px; white-space: nowrap;}
+#plotFit {flex: none; min-height: 28px; padding: 3px 10px; border: 2px solid var(--white); border-radius: 0; background: var(--acid); color: var(--ink); font-weight: 900; text-transform: uppercase; cursor: pointer;}
 .plot-legend {display: flex; min-width: 0; gap: 7px; overflow-x: auto;}
 .plot-legend span {display: flex; align-items: center; flex: none; gap: 5px; padding: 4px 6px; border: 2px solid #777; font-size: 10px; font-weight: 900; white-space: nowrap;}
 .plot-legend i {display: inline-block; width: 11px; height: 11px; border: 1px solid var(--white);}
@@ -129,7 +131,10 @@ body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, 
 #circuitLists {display: flex; flex-direction: column; gap: 26px; background: var(--ink); color: var(--white);}
 #circuitLists h2 {display: inline-block; padding: 4px 6px; background: var(--acid); color: var(--ink);}
 #properties {background: var(--white);}
-#properties > h2 {margin-bottom: 20px; padding: 0 0 10px; border-bottom: 6px solid var(--ink); font-size: 18px;}
+.properties-header {display: flex; align-items: center; gap: 8px; margin-bottom: 20px; padding: 0 0 10px; border-bottom: 6px solid var(--ink);}
+.properties-header h2 {margin: 0; font-size: 18px;}
+#toggleProperties {display: none; margin-left: auto; padding: 5px 7px; border: 2px solid var(--ink); border-radius: 0; background: var(--white); font-size: 10px; font-weight: 900; text-transform: uppercase;}
+.selection-actions {display: none;}
 .object-list {display: grid; gap: 6px;}
 .object-list:empty::after {color: #888; font-size: 11px; content: "— EMPTY —";}
 .object-list button {padding: 8px 9px; border: 2px solid #777; border-radius: 0; background: var(--ink); color: var(--white); text-align: left; cursor: pointer;}
@@ -170,6 +175,7 @@ body[data-mode="simulation"] .port-hit, body[data-mode="simulation"] .wire-hit, 
 .element-hit {fill: transparent; pointer-events: fill;}
 .symbol {fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: stroke;}
 .element.selected .symbol {stroke: var(--blue); stroke-width: 3.5;}
+.element.selected > .element-hit {stroke: var(--blue); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke;}
 .reference-label {fill: var(--ink); font-size: 14px; font-weight: 700; pointer-events: none; user-select: none;}
 .element.selected .reference-label {fill: var(--blue);}
 .opamp-sign {fill: var(--ink); font-size: 18px; font-weight: 900; pointer-events: none; user-select: none;}
@@ -278,4 +284,23 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
     .property input, .property select {min-height: 36px; padding: 5px 7px; font-size: 14px;}
     .parameters-box, .transient-controls form {padding: 9px; box-shadow: 3px 3px 0 var(--ink);}
     .transient-controls form button {min-height: 38px; padding: 6px 8px;}
+}
+
+@media (max-width: 820px) {
+    #toggleProperties {display: block; cursor: pointer;}
+    .selection-actions {display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 3px solid var(--ink);}
+    .selection-actions strong {min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap;}
+    .selection-actions button {min-height: 34px; padding: 5px 7px; border: 2px solid var(--ink); border-radius: 0; background: var(--white); font-size: 10px; font-weight: 900; text-transform: uppercase;}
+    .selection-actions .delete-selection:not(:disabled) {background: var(--red); color: var(--white);}
+    .selection-actions button:disabled {color: #777;}
+    #properties.properties-collapsed #propertyContent {display: none;}
+    #properties.properties-collapsed {overflow: hidden;}
+    body.properties-collapsed {grid-template-rows: minmax(0, 1fr) 112px 32px;}
+}
+
+@media (max-width: 600px) {
+    #componentFilter {min-height: 26px; padding: 3px 5px; font-size: 10px;}
+    body.properties-collapsed {grid-template-rows: 156px minmax(180px, 1fr) 112px 32px;}
+    #transientPlot header > span {display: none;}
+    #plotFit {min-height: 30px;}
 }

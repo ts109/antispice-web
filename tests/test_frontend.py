@@ -23,8 +23,8 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=33"', document)
-        self.assertIn('src="./editor.js?v=55"', document)
+        self.assertIn('href="./styles.css?v=34"', document)
+        self.assertIn('src="./editor.js?v=56"', document)
 
     def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
         """Empty-grid taps add bends that are retained when a wire is completed."""
@@ -94,6 +94,22 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("trackTouchStart(event)", plot)
         self.assertIn("trackTouchMove(event)", plot)
         self.assertIn("function touchDistance([first, second])", plot)
+
+    def test_editor_exposes_history_filter_and_contextual_actions(self) -> None:
+        """High-value editor actions are available without modal dialogs."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        document = (frontend / "index.html").read_text()
+        editor = (frontend / "editor.js").read_text()
+        styles = (frontend / "styles.css").read_text()
+
+        self.assertIn('data-history="undo"', document)
+        self.assertIn("data-duplicate-selection", document)
+        self.assertIn('id="componentFilter"', document)
+        self.assertIn('id="plotFit"', document)
+        self.assertIn("function commitHistory()", editor)
+        self.assertIn("function duplicateSelected()", editor)
+        self.assertIn("function moveSelected(dx, dy)", editor)
+        self.assertIn("body.properties-collapsed", styles)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

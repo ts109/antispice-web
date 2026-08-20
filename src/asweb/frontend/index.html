@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ANTISPICE WEB — Schematic Editor</title>
 <link rel="icon" href="./favicon.ico" sizes="any">
-<link rel="stylesheet" href="./styles.css?v=33">
+<link rel="stylesheet" href="./styles.css?v=34">
 </head>
 
 <body data-view="landing">
@@ -109,6 +109,11 @@
         <h2 id="toolsHeading">Tools</h2>
         <div class="tool-grid">
             <button type="button" data-tool="select">Select</button>
+            <div class="button-grid history-actions">
+                <button type="button" data-history="undo" title="Undo (Ctrl/Cmd+Z)" disabled>Undo</button>
+                <button type="button" data-history="redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>Redo</button>
+            </div>
+            <button type="button" data-duplicate-selection disabled>Duplicate</button>
             <button class="delete-selection" type="button" data-delete-selection disabled>Delete selected</button>
             <div class="button-grid">
                 <button type="button" data-rotate="-90" title="Rotate counterclockwise ([)">↺ 90°</button>
@@ -118,6 +123,8 @@
     </nav>
     <section class="edit-only" aria-labelledby="componentsHeading">
         <h2 id="componentsHeading">Components</h2>
+        <label class="visually-hidden" for="componentFilter">Filter components</label>
+        <input id="componentFilter" type="search" placeholder="FILTER COMPONENTS" autocomplete="off">
         <div id="componentTools" class="component-tools"></div>
     </section>
     <section class="edit-only" aria-labelledby="markersHeading">
@@ -138,7 +145,7 @@
         <g id="overlayLayer"></g>
     </svg>
     <section id="transientPlot" aria-label="Transient simulation plot">
-        <header><strong id="plotHeading">TRANSIENT / 0001</strong><div class="plot-legend"></div><span>WHEEL ZOOM · DRAG PAN · DOUBLE-CLICK FIT</span></header>
+        <header><strong id="plotHeading">TRANSIENT / 0001</strong><div class="plot-legend"></div><button id="plotFit" type="button">Fit</button><span>DRAG PAN · PINCH/WHEEL ZOOM</span></header>
         <div class="plot-canvas-stack">
             <canvas aria-hidden="true"></canvas>
             <canvas aria-hidden="true"></canvas>
@@ -167,8 +174,15 @@
 </aside>
 
 <aside id="properties" aria-labelledby="propertiesHeading">
-    <h2 id="propertiesHeading">Properties</h2>
-    <button class="delete-selection property-delete" type="button" data-delete-selection disabled>Delete selected</button>
+    <header class="properties-header">
+        <h2 id="propertiesHeading">Properties</h2>
+        <button id="toggleProperties" type="button" aria-expanded="true">Collapse</button>
+    </header>
+    <div class="selection-actions" aria-label="Selected object actions">
+        <strong id="selectionSummary">Nothing selected</strong>
+        <button type="button" data-duplicate-selection disabled>Duplicate</button>
+        <button class="delete-selection" type="button" data-delete-selection disabled>Delete</button>
+    </div>
     <div id="propertyContent">Nothing selected</div>
 </aside>
 
@@ -182,6 +196,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=55"></script>
+<script type="module" src="./editor.js?v=56"></script>
 </body>
 </html>
