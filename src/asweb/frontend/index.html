@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>ANTISPICE WEB — Schematic Editor</title>
 <link rel="icon" href="./favicon.ico" sizes="any">
-<link rel="stylesheet" href="./styles.css?v=26">
+<link rel="stylesheet" href="./styles.css?v=33">
 </head>
 
 <body data-view="landing">
@@ -78,8 +78,10 @@
 </main>
 
 <aside id="toolbar" aria-label="Editor controls">
-    <h1><span>ANTISPICE</span><em>WEB</em></h1>
-    <button id="showLanding" type="button">About</button>
+    <header class="toolbar-brand">
+        <h1><span>ANTISPICE</span><em>WEB</em></h1>
+        <button id="showLanding" type="button">About</button>
+    </header>
     <section id="schematicControls" aria-labelledby="schematicHeading">
         <h2 id="schematicHeading">Schematic</h2>
         <label class="visually-hidden" for="schematicName">Schematic name</label>
@@ -106,6 +108,7 @@
         <h2 id="toolsHeading">Tools</h2>
         <div class="tool-grid">
             <button type="button" data-tool="select">Select</button>
+            <button class="delete-selection" type="button" data-delete-selection disabled>Delete selected</button>
             <div class="button-grid">
                 <button type="button" data-rotate="-90" title="Rotate counterclockwise ([)">↺ 90°</button>
                 <button type="button" data-rotate="90" title="Rotate clockwise (])">90° ↻</button>
@@ -164,6 +167,7 @@
 
 <aside id="properties" aria-labelledby="propertiesHeading">
     <h2 id="propertiesHeading">Properties</h2>
+    <button class="delete-selection property-delete" type="button" data-delete-selection disabled>Delete selected</button>
     <div id="propertyContent">Nothing selected</div>
 </aside>
 
@@ -177,6 +181,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=50"></script>
+<script type="module" src="./editor.js?v=53"></script>
 </body>
 </html>

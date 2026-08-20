@@ -22,8 +22,8 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("mailto:ts109@pm.me", document)
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
-        self.assertIn('href="./styles.css?v=26"', document)
-        self.assertIn('src="./editor.js?v=50"', document)
+        self.assertIn('href="./styles.css?v=33"', document)
+        self.assertIn('src="./editor.js?v=53"', document)
 
     def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
         """Empty-grid taps add bends that are retained when a wire is completed."""
@@ -45,6 +45,33 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("@media (pointer: coarse)", styles)
         self.assertIn("@media (max-width: 820px)", styles)
         self.assertIn("#properties {display: block; grid-row: 2; grid-column: 2", styles)
+
+    def test_mobile_editor_exposes_selection_deletion_and_adaptive_layouts(self) -> None:
+        """Touch users get an explicit delete action in portrait and landscape layouts."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        document = (frontend / "index.html").read_text()
+        editor = (frontend / "editor.js").read_text()
+        styles = (frontend / "styles.css").read_text()
+
+        self.assertEqual(document.count("data-delete-selection"), 2)
+        self.assertIn('class="toolbar-brand"', document)
+        self.assertIn('button.addEventListener("click", () => deleteSelected())', editor)
+        self.assertIn("@media (max-width: 600px)", styles)
+        self.assertIn("orientation: landscape", styles)
+        self.assertIn("#toolbar .delete-selection:not(:disabled)", styles)
+        self.assertIn("deliberately compact horizontal tool rail", styles)
+        self.assertIn("grid-template-rows: 156px", styles)
+        self.assertIn('componentsHeading"] {flex-basis: 364px; padding: 0 0 8px;', styles)
+
+    def test_plot_resizes_with_its_panel_and_viewport(self) -> None:
+        """The canvas follows CSS panel sizing and redraws after viewport changes."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        plot = (frontend / "plot.js").read_text()
+
+        self.assertIn("this.resizeObserver.observe(root);", plot)
+        self.assertIn('window.addEventListener("resize", () => this.refreshLayout())', plot)
+        self.assertNotIn("canvas.style.width", plot)
+        self.assertNotIn("canvas.style.height", plot)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

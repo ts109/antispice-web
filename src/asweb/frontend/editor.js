@@ -4,7 +4,7 @@ import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelP
 import {initializeLandingPage} from "./landing.js?v=1";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
-import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=7";
+import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=9";
 import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
 import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=2";
 
@@ -44,6 +44,7 @@ const savedSchematics = document.querySelector("#savedSchematics");
 const newSchematicButton = document.querySelector("#newSchematic");
 const saveSchematicButton = document.querySelector("#saveSchematic");
 const loadSchematicButton = document.querySelector("#loadSchematic");
+const deleteSelectionButtons = document.querySelectorAll("[data-delete-selection]");
 
 const schematicStore = new SchematicStore(localStorage);
 let saveTimer = null;
@@ -271,6 +272,10 @@ function updateToolbar() {
 
     for (const button of document.querySelectorAll("#toolbar [data-rotate]")) {
         button.disabled = application.mode !== "edit" || selected?.kind !== "element" && selected?.kind !== "marker";
+    }
+    const deletableKinds = new Set(["element", "marker", "wire", "waypoint"]);
+    for (const button of deleteSelectionButtons) {
+        button.disabled = application.mode !== "edit" || !deletableKinds.has(selected?.kind);
     }
 }
 
@@ -660,6 +665,10 @@ for (const button of document.querySelectorAll("#toolbar [data-tool]")) bindTool
 
 for (const button of document.querySelectorAll("#toolbar [data-rotate]")) {
     button.addEventListener("click", () => rotateSelected(Number(button.dataset.rotate)));
+}
+
+for (const button of deleteSelectionButtons) {
+    button.addEventListener("click", () => deleteSelected());
 }
 
 for (const button of document.querySelectorAll("#toolbar [data-mode]")) {

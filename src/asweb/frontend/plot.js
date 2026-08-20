@@ -13,10 +13,15 @@ export class TransientPlot {
         this.cursor = null;
         this.drag = null;
         this.frame = null;
+        this.layoutFrame = null;
+        this.canvasSize = null;
         this.downsampleScratch = [];
         this.horizontal = {label: "TIME / s", format: formatTime, ticks: axisTicks};
-        this.resizeObserver = new ResizeObserver(() => this.resize());
+        this.resizeObserver = new ResizeObserver(() => this.refreshLayout());
         this.resizeObserver.observe(root.querySelector(".plot-canvas-stack"));
+        this.resizeObserver.observe(root);
+        window.addEventListener("resize", () => this.refreshLayout());
+        window.visualViewport?.addEventListener("resize", () => this.refreshLayout());
         this.interaction.addEventListener("wheel", event => this.zoom(event), {passive: false});
         this.interaction.addEventListener("pointerdown", event => this.beginPan(event));
         this.interaction.addEventListener("pointermove", event => this.pointerMove(event));
@@ -53,7 +58,11 @@ export class TransientPlot {
         // The plot is constructed while edit mode hides it. ResizeObserver does
         // not consistently report the subsequent display:none -> grid change,
         // so measure it explicitly whenever it becomes relevant.
-        requestAnimationFrame(() => this.resize());
+        if (this.layoutFrame !== null) return;
+        this.layoutFrame = requestAnimationFrame(() => {
+            this.layoutFrame = null;
+            this.resize();
+        });
     }
 
     fit() {
@@ -69,13 +78,17 @@ export class TransientPlot {
         const bounds = this.interaction.getBoundingClientRect();
         if (!(bounds.width > 0 && bounds.height > 0)) return;
         const ratio = window.devicePixelRatio || 1;
+        const width = Math.max(1, Math.round(bounds.width * ratio));
+        const height = Math.max(1, Math.round(bounds.height * ratio));
+        if (this.canvasSize?.width === width && this.canvasSize.height === height && this.width === bounds.width && this.height === bounds.height) {
+            return;
+        }
         for (const canvas of this.canvases) {
-            canvas.width = Math.max(1, Math.round(bounds.width * ratio));
-            canvas.height = Math.max(1, Math.round(bounds.height * ratio));
-            canvas.style.width = `${bounds.width}px`;
-            canvas.style.height = `${bounds.height}px`;
+            canvas.width = width;
+            canvas.height = height;
         }
         for (const context of this.contexts) context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        this.canvasSize = {width, height};
         this.width = bounds.width;
         this.height = bounds.height;
         this.scheduleRender();
