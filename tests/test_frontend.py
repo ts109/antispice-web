@@ -23,7 +23,7 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=34"', document)
+        self.assertIn('href="./styles.css?v=35"', document)
         self.assertIn('src="./editor.js?v=56"', document)
 
     def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
@@ -110,6 +110,7 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("function duplicateSelected()", editor)
         self.assertIn("function moveSelected(dx, dy)", editor)
         self.assertIn("body.properties-collapsed", styles)
+        self.assertIn("grid-template-rows: repeat(2, 46px)", styles)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

@@ -300,7 +300,12 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
 
 @media (max-width: 600px) {
     #componentFilter {min-height: 26px; padding: 3px 5px; font-size: 10px;}
-    body.properties-collapsed {grid-template-rows: 156px minmax(180px, 1fr) 112px 32px;}
+    body {grid-template-rows: 166px minmax(180px, 1fr) minmax(132px, 24vh) 32px;}
+    body.properties-collapsed {grid-template-rows: 166px minmax(180px, 1fr) 112px 32px;}
+    #toolbar .edit-only[aria-labelledby="componentsHeading"] {padding-bottom: 0;}
+    #componentTools {grid-template-rows: repeat(2, 46px); align-content: start;}
+    #componentTools button {height: 46px; min-height: 46px; overflow: hidden;}
+    #componentTools .component-name, #componentTools .component-reference {overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
     #transientPlot header > span {display: none;}
     #plotFit {min-height: 30px;}
 }
