@@ -858,6 +858,17 @@ svg.addEventListener("pointerdown", event => {
         // Empty canvas
         // --------------------------------------------------
 
+        if (drawingWire) {
+            const point = snapPoint(svgPoint(event));
+            const previous = drawingWire.waypoints.at(-1) ?? nodePosition(drawingWire.startNode);
+            if (point.x !== previous.x || point.y !== previous.y) {
+                drawingWire.waypoints.push(point);
+                drawingWire.mouse = point;
+            }
+            renderOverlay();
+            return;
+        }
+
         drawingWire = null;
 
         select(null);
@@ -890,19 +901,30 @@ window.addEventListener("keydown", event => {
     /*
      * Don't do anything while editing text in the properties panel.
      */
-    if (document.activeElement?.tagName !== "INPUT")
+    if (!document.activeElement?.matches("input, select, textarea, [contenteditable='true']"))
     {
         switch (event.key)
         {
             case "Backspace":
             case "Delete":
                 event.preventDefault();
-                deleteSelected();
+                if (drawingWire) {
+                    if (drawingWire.waypoints.length) drawingWire.waypoints.pop();
+                    else drawingWire = null;
+                    renderOverlay();
+                } else {
+                    deleteSelected();
+                }
                 break;
 
             case "Escape":
-                cancelCurrentOperation();
-                select(null);
+                if (drawingWire) {
+                    drawingWire = null;
+                    renderOverlay();
+                } else {
+                    cancelCurrentOperation();
+                    select(null);
+                }
                 break;
 
             case "ArrowLeft":
@@ -1039,7 +1061,7 @@ function renderMarker(marker) {
         marker.ports.forEach((nodeId, index) => {
             const port = library[marker.type].ports[index];
             const visible = svgElement("circle", {cx: port.x, cy: port.y, r: 5});
-            const hit = svgElement("circle", {cx: port.x, cy: port.y, r: 10});
+            const hit = svgElement("circle", {cx: port.x, cy: port.y, r: 14});
             visible.classList.add("port-visible");
             visible.dataset.nodeId = nodeId;
             hit.classList.add("port-hit");
@@ -1078,6 +1100,7 @@ function renderMarker(marker) {
             renderOverlay();
             select({kind: "marker", id: marker.id});
             draggingMarker = marker.id;
+            svg.setPointerCapture(event.pointerId);
         });
         elementLayer.append(g);
     }
@@ -1141,7 +1164,7 @@ function renderElement(element) {
                 visible.classList.add("port-visible");
                 visible.dataset.nodeId = nodeId;
 
-                const hit = svgElement("circle", {cx: port.x, cy: port.y, r: 10});
+                const hit = svgElement("circle", {cx: port.x, cy: port.y, r: 14});
 
                 hit.classList.add("port-hit");
                 hit.dataset.nodeId = nodeId;
@@ -1187,9 +1210,8 @@ function renderElement(element) {
 
                 select({kind: "element", id: element.id});
 
-                const p = svgPoint(event);
-
                 draggingElement = element.id;
+                svg.setPointerCapture(event.pointerId);
             }
         );
 
@@ -1252,7 +1274,7 @@ function renderJunction(node) {
 
         dot.classList.add("junction");
 
-        const hit = svgElement("circle", {r: 10});
+        const hit = svgElement("circle", {r: 14});
 
         hit.classList.add("junction-hit");
         hit.addEventListener("pointerdown", event => {
@@ -1315,7 +1337,7 @@ function handleNodeClick(nodeId) {
     // First endpoint
     if (!drawingWire) {
         select({kind: "node", id: nodeId});
-        drawingWire = {startNode: nodeId, mouse: nodePosition(nodeId)};
+        drawingWire = {startNode: nodeId, mouse: nodePosition(nodeId), waypoints: []};
         renderOverlay();
 
         return;
@@ -1330,7 +1352,7 @@ function handleNodeClick(nodeId) {
     }
 
     // Second endpoint
-    createWire(drawingWire.startNode, nodeId);
+    createWire(drawingWire.startNode, nodeId, drawingWire.waypoints);
     drawingWire = null;
     renderOverlay();
 }
@@ -1340,7 +1362,7 @@ function handleNodeClick(nodeId) {
 // Wire creation
 // ============================================================================
 
-function createWire(aNode, bNode) {
+function createWire(aNode, bNode, waypoints = []) {
     const a = nodePosition(aNode);
     const b = nodePosition(bNode);
 
@@ -1348,7 +1370,7 @@ function createWire(aNode, bNode) {
         id: takeId("wire"),
         a: aNode,
         b: bNode,
-        waypoints: [],
+        waypoints: waypoints.map(point => ({id: takeId("waypoint"), ...point})),
         points: [a, b]
     };
 
@@ -1424,7 +1446,7 @@ function renderWire(wire) {
                     const nodeId = splitWireAt( wire.id, i, p);
 
                     if (nodeId !== drawingWire.startNode) {
-                        createWire(drawingWire.startNode, nodeId);
+                        createWire(drawingWire.startNode, nodeId, drawingWire.waypoints);
                     }
 
                     drawingWire = null;
@@ -1650,11 +1672,16 @@ function renderOverlay() {
     // --------------------------------------------------
 
     if (drawingWire) {
-        const points = routeOrthogonally([nodeAnchor(drawingWire.startNode), drawingWire.mouse]);
+        const points = routeOrthogonally([nodeAnchor(drawingWire.startNode), ...drawingWire.waypoints, drawingWire.mouse]);
         const path = svgElement("polyline", {points: points.map(point => `${point.x},${point.y}`).join(" ")});
 
         path.classList.add("temp-wire");
         overlayLayer.append(path);
+        for (const point of drawingWire.waypoints) {
+            const handle = svgElement("rect", {x: point.x - 4, y: point.y - 4, width: 8, height: 8});
+            handle.classList.add("temp-waypoint");
+            overlayLayer.append(handle);
+        }
     }
 }
 
@@ -1831,7 +1858,7 @@ function renderProperties() {
     }
 
     if (selected?.kind === "node") {
-        renderNetProperty(selected.id, "Terminal selected. Click another terminal or wire to complete the connection.");
+        renderNetProperty(selected.id, "Wiring active. Tap empty grid points to add bends, then tap a terminal or wire to finish. Backspace removes the last bend; Escape cancels.");
         return;
     }
 

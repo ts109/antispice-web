@@ -22,8 +22,29 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("mailto:ts109@pm.me", document)
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
-        self.assertIn('href="./styles.css?v=25"', document)
-        self.assertIn('src="./editor.js?v=49"', document)
+        self.assertIn('href="./styles.css?v=26"', document)
+        self.assertIn('src="./editor.js?v=50"', document)
+
+    def test_initial_wire_drawing_supports_provisional_waypoints(self) -> None:
+        """Empty-grid taps add bends that are retained when a wire is completed."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        editor = (frontend / "editor.js").read_text()
+
+        self.assertIn("drawingWire.waypoints.push(point)", editor)
+        self.assertIn("createWire(drawingWire.startNode, nodeId, drawingWire.waypoints)", editor)
+        self.assertIn("...drawingWire.waypoints, drawingWire.mouse", editor)
+        self.assertIn('handle.classList.add("temp-waypoint")', editor)
+
+    def test_tablet_editor_has_touch_targets_and_visible_properties(self) -> None:
+        """Tablet layouts retain property editing and coarse-pointer hit areas."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        styles = (frontend / "styles.css").read_text()
+
+        self.assertIn("#editor {", styles)
+        self.assertIn("touch-action: none", styles)
+        self.assertIn("@media (pointer: coarse)", styles)
+        self.assertIn("@media (max-width: 820px)", styles)
+        self.assertIn("#properties {display: block; grid-row: 2; grid-column: 2", styles)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

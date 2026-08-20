@@ -98,7 +98,9 @@ class ApiTest(unittest.TestCase):
 
         result = _compile_response(request)
 
-        self.assertIn('"Q1": {"v_be": 0, "v_bc": 1, "i_forward": 2, "i_reverse": 3}', result["javascript"])
+        auxiliaries = _make_circuit(request).resolve_model("Q1").auxiliaries
+        for index, name in enumerate(auxiliaries):
+            self.assertIn(f'"{name}": {index}', result["javascript"])
         self.assertIn("evaluate_auxiliaries", result["javascript"])
 
     def test_ac_compile_embeds_independent_input_cases(self) -> None:
