@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import importlib.metadata
 import json
 import logging
 import os
@@ -314,7 +315,7 @@ def _run_compile_stage(compilation_id: str, name: str, operation: Any) -> Any:
 
 def create_app() -> FastAPI:
     """Create the API and mount its packaged static frontend."""
-    application = FastAPI(title="Antispice Web", version="0.1")
+    application = FastAPI(title="Antispice Web", version=importlib.metadata.version(__package__))
 
     @application.middleware("http")
     async def log_request(request: Request, call_next: Any) -> Any:
