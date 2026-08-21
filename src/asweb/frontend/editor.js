@@ -1,4 +1,4 @@
-import {availableDefinitions, inheritedParameters, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=2";
+import {availableDefinitions, inheritedParameters, libraryTopology, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=3";
 import {acConfiguration, compileACSimulation, createACState, runACSweeps} from "./ac.js?v=1";
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=18";
 import {initializeLandingPage} from "./landing.js?v=1";
@@ -35,6 +35,7 @@ const plotFitButton = document.querySelector("#plotFit");
 const fitSchematicButton = document.querySelector("#fitSchematic");
 const componentTools = document.querySelector("#componentTools");
 const componentFilter = document.querySelector("#componentFilter");
+const componentBreadcrumb = document.querySelector("#componentBreadcrumb");
 const statusMode = document.querySelector("#statusMode");
 const statusZoom = document.querySelector("#statusZoom");
 const statusElements = document.querySelector("#statusElements");
@@ -62,6 +63,7 @@ let historyTimer = null;
 let history = [];
 let historyIndex = -1;
 let toastTimer = null;
+let componentTrail = [];
 
 function showUndoToast(message) {
     clearTimeout(toastTimer);
@@ -259,27 +261,99 @@ function bindToolButton(button) {
 
 function rebuildComponentTools() {
     componentTools.replaceChildren();
+    componentBreadcrumb.replaceChildren();
     const filter = componentFilter.value.trim().toLowerCase();
-    for (const [name, definition] of Object.entries(availableDefinitions())) {
-        if (definition.type === "part") continue;
-        const button = document.createElement("button");
-        const label = document.createElement("span");
-        const reference = document.createElement("small");
-        const resolvedName = resolveModelName(name);
-        const displayName = definitionDisplayName(name, definition, resolvedName);
-        if (filter && !`${displayName} ${name}`.toLowerCase().includes(filter)) continue;
-        button.type = "button";
-        button.dataset.tool = name;
-        label.textContent = displayName;
-        label.className = "component-name";
-        reference.textContent = name;
-        reference.className = "component-reference";
-        button.title = `${name} (${definition.type})`;
-        button.append(label);
-        if (label.textContent !== name) button.append(reference);
-        bindToolButton(button);
-        componentTools.append(button);
+    if (filter) {
+        for (const [name, definition] of Object.entries(availableDefinitions())) {
+            const resolvedName = resolveModelName(name);
+            const displayName = definitionDisplayName(name, definition, resolvedName);
+            if (`${displayName} ${name} ${definition.type}`.toLowerCase().includes(filter)) {
+                appendDefinitionChoice(name, definition.type);
+            }
+        }
+        updateToolbar();
+        return;
     }
+
+    const root = libraryTopology();
+    const location = componentTrail.at(-1)?.node ?? root;
+    appendBreadcrumb("Library", -1);
+    componentTrail.forEach((entry, index) => appendBreadcrumb(entry.label, index));
+
+    if (location.reference) {
+        appendDefinitionChoice(location.reference, "model");
+        for (const part of location.parts) appendDefinitionChoice(part, "part");
+        updateToolbar();
+        return;
+    }
+
+    for (const category of location.categories) {
+        appendComponentBrowserChoice(category.name, `${category.models.length} models`, () => {
+            componentTrail.push({label: category.name, node: category});
+            rebuildComponentTools();
+        });
+    }
+    for (const model of location.models) {
+        if (!model.parts.length) {
+            appendDefinitionChoice(model.reference, "model");
+            continue;
+        }
+        const definition = availableDefinitions()[model.reference];
+        const displayName = definitionDisplayName(model.reference, definition, model.reference);
+        appendComponentBrowserChoice(displayName, `${model.parts.length} parts + model`, () => {
+            componentTrail.push({label: displayName, node: model});
+            rebuildComponentTools();
+        });
+    }
+    updateToolbar();
+}
+
+function appendBreadcrumb(label, index) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.style.setProperty("--breadcrumb-depth", Math.max(0, index + 1));
+    button.disabled = index === componentTrail.length - 1;
+    button.addEventListener("click", () => {
+        componentTrail = componentTrail.slice(0, index + 1);
+        rebuildComponentTools();
+    });
+    componentBreadcrumb.append(button);
+}
+
+function appendComponentBrowserChoice(label, detail, activate) {
+    const button = document.createElement("button");
+    const name = document.createElement("span");
+    const description = document.createElement("small");
+    button.type = "button";
+    button.className = "component-browser-choice";
+    name.className = "component-name";
+    name.textContent = label;
+    description.className = "component-reference";
+    description.textContent = `${detail} ›`;
+    button.append(name, description);
+    button.addEventListener("click", activate);
+    componentTools.append(button);
+}
+
+function appendDefinitionChoice(name, kind) {
+    const definition = availableDefinitions()[name];
+    if (!definition) return;
+    const button = document.createElement("button");
+    const label = document.createElement("span");
+    const reference = document.createElement("small");
+    const resolvedName = resolveModelName(name);
+    const displayName = definitionDisplayName(name, definition, resolvedName);
+    button.type = "button";
+    button.dataset.tool = name;
+    label.textContent = displayName;
+    label.className = "component-name";
+    reference.textContent = `${name} · ${kind}`;
+    reference.className = "component-reference";
+    button.title = `${name} (${kind})`;
+    button.append(label, reference);
+    bindToolButton(button);
+    componentTools.append(button);
 }
 
 function compatibleDefinitions(use) {

@@ -222,7 +222,32 @@ def _library_response() -> dict[str, Any]:
     models = sum(isinstance(definition, antispice.Model) for definition in antispice.BUILTIN_LIBRARY.values())
     parts = len(antispice.BUILTIN_LIBRARY) - models
     logger.info("serving library definitions=%d models=%d parts=%d", len(antispice.BUILTIN_LIBRARY), models, parts)
-    return {"definitions": {name: _encode_definition(definition) for name, definition in antispice.BUILTIN_LIBRARY.items()}}
+    return {
+        "definitions": {name: _encode_definition(definition) for name, definition in antispice.BUILTIN_LIBRARY.items()},
+        "topology": _encode_library_topology(antispice.BUILTIN_LIBRARY_TOPOLOGY),
+    }
+
+
+def _encode_library_topology(topology: antispice.LibraryTopology) -> dict[str, Any]:
+    parts_by_model: dict[str, list[str]] = {}
+    for reference, definition in antispice.BUILTIN_LIBRARY.items():
+        if not isinstance(definition, antispice.Part) or not isinstance(definition.model, str):
+            continue
+        model = definition.model.removeprefix("builtin.")
+        parts_by_model.setdefault(model, []).append(reference)
+
+    def encode(node: antispice.LibraryTopology) -> dict[str, Any] | None:
+        models = [
+            {"reference": reference, "parts": sorted(parts_by_model.get(reference, []))}
+            for reference in node.definitions
+            if isinstance(antispice.BUILTIN_LIBRARY[reference], antispice.Model)
+        ]
+        categories = [encoded for child in node.includes if (encoded := encode(child)) is not None]
+        if not models and not categories:
+            return None
+        return {"name": node.name, "models": models, "categories": categories}
+
+    return encode(topology) or {"name": topology.name, "models": [], "categories": []}
 
 
 def _compile_response(

@@ -99,6 +99,12 @@ body[data-mode="simulation"] .edit-only, body[data-mode="ac"] .edit-only {displa
 .component-name {line-height: 1.15; text-transform: capitalize;}
 .component-reference {margin-top: 4px; color: var(--muted); font-size: 9px; font-weight: 400; line-height: 1.15;}
 #componentFilter {width: 100%; min-width: 0; padding: 6px 7px; border: 2px solid var(--ink); border-radius: 0; background: var(--white); color: var(--ink); font-size: 10px; font-weight: 900; text-transform: uppercase;}
+#componentBreadcrumb {display: grid; min-width: 0; gap: 3px; margin: 5px 0 7px; overflow: hidden;}
+#componentBreadcrumb button {width: calc(100% - var(--breadcrumb-depth) * 9px); min-width: 0; min-height: 24px; margin-left: calc(var(--breadcrumb-depth) * 9px); padding: 2px 5px; border: 0; background: var(--ink); color: var(--white); box-shadow: none; font-size: 9px; text-align: left; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; text-transform: uppercase;}
+#componentBreadcrumb button + button::before {content: "↳ ";}
+#componentBreadcrumb button:disabled {background: var(--blue); color: var(--white);}
+#componentTools .component-browser-choice {background: var(--ink); color: var(--white);}
+#componentTools .component-browser-choice .component-reference {color: var(--acid);}
 #componentTools button:hover .component-reference {color: var(--white);}
 #toolbar button:hover:not(:disabled) {background: var(--red); color: var(--white); transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink);}
 #toolbar button:active:not(:disabled) {transform: translate(3px, 3px); box-shadow: none;}
@@ -312,11 +318,14 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
 
 @media (max-width: 600px) {
     #componentFilter {min-height: 26px; padding: 3px 5px; font-size: 10px;}
-    body {grid-template-rows: 166px minmax(180px, 1fr) minmax(132px, 24vh) 32px;}
-    body.properties-collapsed {grid-template-rows: 166px minmax(180px, 1fr) 112px 32px;}
+    body {grid-template-rows: 184px minmax(180px, 1fr) minmax(132px, 24vh) 32px;}
+    body.properties-collapsed {grid-template-rows: 184px minmax(180px, 1fr) 112px 32px;}
     #toolbar .edit-only[aria-labelledby="componentsHeading"] {padding-bottom: 0;}
-    #componentTools {grid-template-rows: repeat(2, 46px); align-content: start;}
-    #componentTools button {height: 46px; min-height: 46px; overflow: hidden;}
+    #componentBreadcrumb {height: 22px; margin-block: 3px 5px;}
+    #componentBreadcrumb {display: flex; overflow: hidden;}
+    #componentBreadcrumb button {flex: 0 1 auto; width: auto; max-width: 120px; min-height: 22px; margin-left: 0;}
+    #componentTools {grid-template-rows: repeat(2, 42px); align-content: start;}
+    #componentTools button {height: 42px; min-height: 42px; overflow: hidden;}
     #componentTools .component-name, #componentTools .component-reference {overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
     #transientPlot header > span {display: none;}
     #plotFit {min-height: 30px;}

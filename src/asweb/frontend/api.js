@@ -1,14 +1,19 @@
 let definitions = {};
+let topology = {name: "Library", models: [], categories: []};
 
 export async function loadLibrary() {
     const response = await fetch("/api/library");
     if (!response.ok) throw new Error(`Unable to load model library (${response.status})`);
-    ({definitions} = await response.json());
+    ({definitions, topology} = await response.json());
     return definitions;
 }
 
 export function availableDefinitions() {
     return definitions;
+}
+
+export function libraryTopology() {
+    return topology;
 }
 
 export function resolveModelName(use) {

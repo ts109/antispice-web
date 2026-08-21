@@ -23,8 +23,8 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=37"', document)
-        self.assertIn('src="./editor.js?v=57"', document)
+        self.assertIn('href="./styles.css?v=39"', document)
+        self.assertIn('src="./editor.js?v=59"', document)
         self.assertIn('id="manualHeading"', document)
         self.assertIn("The useful gestures.", document)
         self.assertNotIn("No specialist workflow required", document)
@@ -113,11 +113,28 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("function duplicateSelected()", editor)
         self.assertIn("function moveSelected(dx, dy)", editor)
         self.assertIn("body.properties-collapsed", styles)
-        self.assertIn("grid-template-rows: repeat(2, 46px)", styles)
+        self.assertIn("grid-template-rows: repeat(2, 42px)", styles)
         self.assertIn('id="fitSchematic"', document)
         self.assertIn('id="editorToast"', document)
         self.assertIn("function fitSchematic()", editor)
         self.assertIn("function showUndoToast(message)", editor)
+
+    def test_component_browser_uses_library_topology(self) -> None:
+        """The palette drills through categories and models before choosing parts."""
+        frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
+        document = (frontend / "index.html").read_text()
+        editor = (frontend / "editor.js").read_text()
+        api = (frontend / "api.js").read_text()
+        styles = (frontend / "styles.css").read_text()
+
+        self.assertIn('id="componentBreadcrumb"', document)
+        self.assertIn("export function libraryTopology()", api)
+        self.assertIn("componentTrail.push", editor)
+        self.assertIn("--breadcrumb-depth", editor)
+        self.assertIn("appendComponentBrowserChoice", editor)
+        self.assertIn('appendDefinitionChoice(location.reference, "model")', editor)
+        self.assertIn('appendDefinitionChoice(part, "part")', editor)
+        self.assertIn("margin-left: calc(var(--breadcrumb-depth) * 9px)", styles)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

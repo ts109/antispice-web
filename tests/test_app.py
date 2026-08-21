@@ -65,6 +65,18 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(_library_response()["definitions"]["fet-shichman-hodges"]["ports"], ["S", "G", "D"])
         self.assertTrue({"1n4007", "2n7000", "bs170", "bc547", "bc548", "bc549"} <= _library_response()["definitions"].keys())
 
+    def test_library_topology_groups_parts_beneath_models(self) -> None:
+        """Visible categories follow includes while part-only files disappear."""
+        topology = _library_response()["topology"]
+        categories = {category["name"]: category for category in topology["categories"]}
+
+        self.assertEqual(set(categories), {"Passive", "Semiconductor", "Sources"})
+        semiconductor = {model["reference"]: model for model in categories["Semiconductor"]["models"]}
+        self.assertIn("2n3904", semiconductor["bjt-charge-control"]["parts"])
+        self.assertIn("2n7000", semiconductor["fet-shichman-hodges-capacitive"]["parts"])
+        self.assertNotIn("Diodes", categories)
+        self.assertNotIn("Transistors", categories)
+
     def test_compile_returns_wasm_and_wrapper(self) -> None:
         """A valid request produces executable artifacts and metadata."""
         with self.assertLogs("asweb.backend", level="INFO") as captured:
