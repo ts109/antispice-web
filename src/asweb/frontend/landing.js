@@ -4,6 +4,7 @@ export function initializeLandingPage({onEditorShown} = {}) {
     const enter = [document.querySelector("#enterEditor"), document.querySelector("#enterEditorFooter")];
 
     function showLanding() {
+        document.documentElement.dataset.view = "landing";
         document.body.dataset.view = "landing";
         landing.removeAttribute("aria-hidden");
         show.setAttribute("aria-expanded", "true");
@@ -11,6 +12,7 @@ export function initializeLandingPage({onEditorShown} = {}) {
     }
 
     function showEditor() {
+        document.documentElement.dataset.view = "editor";
         document.body.dataset.view = "editor";
         landing.setAttribute("aria-hidden", "true");
         show.setAttribute("aria-expanded", "false");

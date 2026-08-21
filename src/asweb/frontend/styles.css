@@ -1,8 +1,10 @@
 :root {--ink: #0a0a0a; --paper: #f4f1e8; --white: #fff; --acid: #eaff00; --blue: #174aff; --red: #ff3d2e; --muted: #737373; --display: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;}
 * {box-sizing: border-box;}
-html, body {margin: 0; width: 100%; height: 100%; overflow: hidden; color: var(--ink); font-family: "Courier New", ui-monospace, monospace;}
+html, body {margin: 0; width: 100%; color: var(--ink); font-family: "Courier New", ui-monospace, monospace;}
+html[data-view="editor"], html[data-view="editor"] body {height: 100%; overflow: hidden;}
+html[data-view="landing"], html[data-view="landing"] body {min-height: 100%; overflow: visible;}
 body {display: grid; grid-template-columns: 220px minmax(0, 1fr) 220px 280px; grid-template-rows: minmax(0, 1fr) 32px; background: var(--paper);}
-body[data-view="landing"] {display: block; overflow: auto; background: #f4f1e8;}
+body[data-view="landing"] {display: block; height: auto; min-height: 100%; background: #f4f1e8; touch-action: auto;}
 body[data-view="landing"] > #toolbar, body[data-view="landing"] > #workspace, body[data-view="landing"] > #circuitLists, body[data-view="landing"] > #properties, body[data-view="landing"] > #statusStrip {display: none;}
 body[data-view="editor"] > #landingPage {display: none;}
 body[data-mode="simulation"] {--acid: #6ff7ff; --blue: #ff3d2e; --paper: #edfaff;}

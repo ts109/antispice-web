@@ -14,6 +14,7 @@ class FrontendCircuitTest(unittest.TestCase):
         frontend = pathlib.Path(__file__).parents[1] / "src/asweb/frontend"
         document = (frontend / "index.html").read_text()
 
+        self.assertIn('<html data-view="landing">', document)
         self.assertIn('<body data-view="landing">', document)
         self.assertIn('id="enterEditor"', document)
         self.assertIn('id="showLanding"', document)
@@ -23,8 +24,10 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=39"', document)
-        self.assertIn('src="./editor.js?v=59"', document)
+        self.assertIn('href="./styles.css?v=40"', document)
+        self.assertIn('src="./editor.js?v=60"', document)
+        self.assertIn('html[data-view="landing"]', (frontend / "styles.css").read_text())
+        self.assertIn('document.documentElement.dataset.view = "landing"', (frontend / "landing.js").read_text())
         self.assertIn('id="manualHeading"', document)
         self.assertIn("The useful gestures.", document)
         self.assertNotIn("No specialist workflow required", document)
@@ -88,6 +91,7 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn('svg.addEventListener("pointerdown", event => {', editor)
         self.assertIn("let editorPan = null;", editor)
         self.assertIn("editorPan = {pointerId: event.pointerId", editor)
+        self.assertIn('if (document.body.dataset.view !== "editor") return;', editor)
 
     def test_plot_supports_touch_pan_and_pinch_zoom(self) -> None:
         """Plots retain one-finger panning and add two-finger time-axis zooming."""

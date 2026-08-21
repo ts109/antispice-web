@@ -1,7 +1,7 @@
 import {availableDefinitions, inheritedParameters, libraryTopology, loadLibrary, resolveModel, resolveModelName} from "./api.js?v=3";
 import {acConfiguration, compileACSimulation, createACState, runACSweeps} from "./ac.js?v=1";
 import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelPresentation} from "./library.js?v=18";
-import {initializeLandingPage} from "./landing.js?v=1";
+import {initializeLandingPage} from "./landing.js?v=2";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
 import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=11";
@@ -1167,6 +1167,7 @@ svg.addEventListener("pointerdown", event => {
 
 
 window.addEventListener("pointerup", () => {
+        if (document.body.dataset.view !== "editor") return;
         if (editorPan && !editorPan.moved && application.mode === "edit") select(null);
         editorPan = null;
         if (application.mode !== "edit") {
@@ -1186,6 +1187,7 @@ window.addEventListener("pointerup", () => {
 
 
 window.addEventListener("keydown", event => {
+    if (document.body.dataset.view !== "editor") return;
     if (application.mode !== "edit") {
         return;
     }
