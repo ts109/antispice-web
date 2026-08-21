@@ -341,6 +341,7 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
     body.properties-collapsed {grid-template-rows: 172px minmax(180px, 1fr) 112px 32px;}
     #toolbar {--rail-control-height: 38px; gap: 10px; padding: 8px 10px 10px; scroll-snap-type: x proximity;}
     #toolbar > * {align-self: stretch; min-width: 0; height: 154px; padding-right: 10px; border-right: 2px solid var(--ink); scroll-snap-align: start;}
+    #toolbar > * + * {scroll-margin-inline-start: 12px;}
     #toolbar > :last-child {padding-right: 0; border-right: 0;}
     #toolbar h2 {height: 14px; margin: 0 0 6px; line-height: 14px;}
     #toolbar button {min-height: var(--rail-control-height); height: var(--rail-control-height);}
