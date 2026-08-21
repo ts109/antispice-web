@@ -24,8 +24,8 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=48"', document)
-        self.assertIn('src="./editor.js?v=63"', document)
+        self.assertIn('href="./styles.css?v=49"', document)
+        self.assertIn('src="./editor.js?v=64"', document)
         self.assertIn('html[data-view="landing"]', (frontend / "styles.css").read_text())
         self.assertIn('document.documentElement.dataset.view = "landing"', (frontend / "landing.js").read_text())
         self.assertIn('id="manualHeading"', document)
@@ -68,7 +68,7 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("#toolbar .delete-selection:not(:disabled)", styles)
         self.assertIn("deliberately compact horizontal tool rail", styles)
         self.assertIn("grid-template-rows: 156px", styles)
-        self.assertIn('componentsHeading"] {flex-basis: 364px; padding: 0 0 8px;', styles)
+        self.assertIn('componentsHeading"] {flex-basis: auto; min-width: 376px; width: max-content;', styles)
 
     def test_plot_resizes_with_its_panel_and_viewport(self) -> None:
         """The canvas follows CSS panel sizing and redraws after viewport changes."""
@@ -135,22 +135,18 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn('class="component-navigation"', document)
         self.assertIn("export function libraryTopology()", api)
         self.assertIn("componentTrail.push", editor)
-        self.assertIn('componentTools.classList.toggle("component-root-level", componentTrail.length === 0)', editor)
         self.assertIn("--breadcrumb-depth", editor)
         self.assertIn("appendComponentBrowserChoice", editor)
         self.assertIn('appendDefinitionChoice(location.reference, "model")', editor)
         self.assertIn('appendDefinitionChoice(part, "part")', editor)
         self.assertIn("margin-left: calc(var(--breadcrumb-depth) * 9px)", styles)
-        self.assertIn("#componentTools.component-root-level {grid-template-columns: repeat(3, 118px)", styles)
-        self.assertIn("grid-auto-flow: row; grid-auto-rows: 42px", styles)
+        self.assertIn("width: max-content", styles)
         self.assertIn("#componentTools {grid-template-columns: none; grid-template-rows: repeat(2, 42px)", styles)
         self.assertIn("portrait toolbar is one horizontally scrollable system", styles)
         self.assertIn("--rail-control-height: 38px", styles)
         self.assertIn("#schematicControls > #loadSchematic {grid-row: 3; grid-column: 3;}", styles)
         self.assertIn("#toolbar #componentBreadcrumb button:disabled", styles)
-        self.assertIn("function updateComponentToolbarExtent()", editor)
-        self.assertIn("Math.max(364, columns * 118", editor)
-        self.assertIn("--component-content-width", styles)
+        self.assertNotIn("updateComponentToolbarExtent", editor)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

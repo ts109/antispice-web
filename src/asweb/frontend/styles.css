@@ -292,7 +292,7 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
     #schematicControls input, #schematicControls select {min-height: 32px; padding: 4px 6px; font-size: 12px;}
     #toolbar nav[aria-labelledby="toolsHeading"] {flex-basis: 330px;}
     #toolbar .tool-grid {gap: 5px;}
-    #toolbar .edit-only[aria-labelledby="componentsHeading"] {flex-basis: 364px; padding: 0 0 8px;}
+    #toolbar .edit-only[aria-labelledby="componentsHeading"] {flex-basis: auto; min-width: 376px; width: max-content; padding: 0 0 8px;}
     #componentTools {grid-auto-columns: 118px; gap: 5px;}
     #componentTools button {padding: 5px 6px;}
     .component-reference {margin-top: 2px;}
@@ -327,8 +327,7 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
     #componentBreadcrumb {height: 22px; margin-block: 3px 5px;}
     #componentBreadcrumb {display: flex; overflow: hidden;}
     #componentBreadcrumb button {flex: 0 1 auto; width: auto; max-width: 120px; min-height: 22px; margin-left: 0;}
-    #componentTools {grid-template-columns: none; grid-template-rows: repeat(2, 42px); align-content: start; width: 364px;}
-    #componentTools.component-root-level {grid-template-columns: repeat(3, 118px); grid-template-rows: none; grid-auto-flow: row; grid-auto-rows: 42px; width: 364px;}
+    #componentTools {grid-template-columns: none; grid-template-rows: repeat(2, 42px); align-content: start; width: max-content;}
     #componentTools button {height: 42px; min-height: 42px; overflow: hidden;}
     #componentTools .component-name, #componentTools .component-reference {overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
     #transientPlot header > span {display: none;}
@@ -358,16 +357,14 @@ body[data-mode="simulation"] .element.signal-selected .symbol, body[data-mode="s
     #toolbar .mode-switch {grid-template-columns: repeat(3, 80px); gap: 5px;}
     #toolbar nav[aria-labelledby="toolsHeading"] {flex-basis: 356px;}
     #toolbar .tool-grid {grid-template-columns: repeat(4, 82px); grid-auto-rows: var(--rail-control-height); gap: 5px;}
-    #toolbar .edit-only[aria-labelledby="componentsHeading"] {flex-basis: calc(var(--component-content-width, 364px) + 12px);}
+    #toolbar .edit-only[aria-labelledby="componentsHeading"] {flex-basis: auto; min-width: 376px; width: max-content; padding: 1px 10px 0 0;}
     .component-navigation {display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 5px; height: 28px; margin-bottom: 5px;}
     #componentFilter {height: 28px; min-height: 28px;}
     #componentBreadcrumb {display: flex; height: 28px; margin: 0; gap: 2px; overflow: hidden;}
     #componentBreadcrumb button {flex: 0 1 auto; width: auto; max-width: 105px; min-height: 28px; height: 28px; margin: 0;}
     #toolbar #componentBreadcrumb button:disabled {background: var(--blue); color: var(--white); box-shadow: none;}
-    #componentTools {grid-template-columns: none; grid-template-rows: repeat(2, var(--rail-control-height)); grid-auto-rows: var(--rail-control-height); width: var(--component-content-width, 364px);}
+    #componentTools {grid-template-columns: none; grid-template-rows: repeat(2, var(--rail-control-height)); grid-auto-rows: var(--rail-control-height); width: max-content; min-width: 364px;}
     #componentTools button {height: var(--rail-control-height); min-height: var(--rail-control-height);}
-    #componentTools.component-root-level {grid-template-columns: repeat(var(--component-columns, 3), 118px); grid-template-rows: 81px; grid-auto-flow: row; grid-auto-rows: 81px; width: var(--component-content-width, 364px);}
-    #componentTools.component-root-level button {height: 81px; min-height: 81px;}
     #toolbar .edit-only[aria-labelledby="markersHeading"] {flex-basis: 262px;}
     #toolbar .edit-only[aria-labelledby="markersHeading"] .button-grid {grid-template-columns: repeat(3, 80px); gap: 5px;}
 }

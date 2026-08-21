@@ -261,7 +261,6 @@ function bindToolButton(button) {
 
 function rebuildComponentTools() {
     componentTools.replaceChildren();
-    componentTools.classList.remove("component-root-level");
     componentBreadcrumb.replaceChildren();
     const filter = componentFilter.value.trim().toLowerCase();
     if (filter) {
@@ -272,21 +271,18 @@ function rebuildComponentTools() {
                 appendDefinitionChoice(name, definition.type);
             }
         }
-        updateComponentToolbarExtent();
         updateToolbar();
         return;
     }
 
     const root = libraryTopology();
     const location = componentTrail.at(-1)?.node ?? root;
-    componentTools.classList.toggle("component-root-level", componentTrail.length === 0);
     appendBreadcrumb("Library", -1);
     componentTrail.forEach((entry, index) => appendBreadcrumb(entry.label, index));
 
     if (location.reference) {
         appendDefinitionChoice(location.reference, "model");
         for (const part of location.parts) appendDefinitionChoice(part, "part");
-        updateComponentToolbarExtent();
         updateToolbar();
         return;
     }
@@ -309,17 +305,7 @@ function rebuildComponentTools() {
             rebuildComponentTools();
         });
     }
-    updateComponentToolbarExtent();
     updateToolbar();
-}
-
-function updateComponentToolbarExtent() {
-    const rows = componentTools.classList.contains("component-root-level") ? 1 : 2;
-    const columns = Math.max(1, Math.ceil(componentTools.childElementCount / rows));
-    const width = Math.max(364, columns * 118 + (columns - 1) * 5);
-    const section = componentTools.closest("section");
-    section.style.setProperty("--component-columns", String(columns));
-    section.style.setProperty("--component-content-width", `${width}px`);
 }
 
 function appendBreadcrumb(label, index) {
