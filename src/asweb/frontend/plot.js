@@ -8,6 +8,7 @@ export class TransientPlot {
         [this.background, this.tracesCanvas, this.interaction] = this.canvases;
         this.contexts = this.canvases.map(canvas => canvas.getContext("2d"));
         this.data = null;
+        this.allTraces = [];
         this.traces = [];
         this.view = null;
         this.cursor = null;
@@ -49,7 +50,8 @@ export class TransientPlot {
     }
 
     setTraces(traces) {
-        this.traces = traces.map((trace, index) => ({...trace, color: COLORS[index % COLORS.length]}));
+        this.allTraces = traces.map((trace, index) => ({...trace, color: COLORS[index % COLORS.length]}));
+        this.traces = this.allTraces;
         this.renderLegend();
         this.refreshLayout();
         this.scheduleRender();
@@ -110,14 +112,34 @@ export class TransientPlot {
 
     renderLegend() {
         this.legend.replaceChildren();
-        for (const trace of this.traces) {
+        for (const trace of this.allTraces) {
             const item = document.createElement("span");
             const swatch = document.createElement("i");
             swatch.style.background = trace.color;
             item.textContent = trace.label;
+            item.role = "button";
+            item.tabIndex = 0;
+            item.title = "Select this trace; select it again to show all traces";
+            const activate = () => this.toggleTraceIsolation(trace);
+            item.addEventListener("click", activate);
+            item.addEventListener("keydown", event => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    activate();
+                }
+            });
             item.prepend(swatch);
             this.legend.append(item);
         }
+    }
+
+    toggleTraceIsolation(trace) {
+        const isolated = this.traces.length === 1 && this.traces[0] === trace;
+        this.traces = isolated ? this.allTraces : [trace];
+        for (const [index, item] of [...this.legend.children].entries()) {
+            item.classList.toggle("trace-muted", !isolated && this.allTraces[index] !== trace);
+        }
+        this.scheduleRender();
     }
 
     geometry() {

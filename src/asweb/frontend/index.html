@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ANTISPICE WEB — Schematic Editor</title>
 <link rel="icon" href="./favicon.ico" sizes="any">
-<link rel="stylesheet" href="./styles.css?v=36">
+<link rel="stylesheet" href="./styles.css?v=37">
 </head>
 
 <body data-view="landing">
@@ -40,8 +40,8 @@
         </div>
         <ul class="landing-capabilities">
             <li><small>Models / parts / circuits</small><strong>Model-driven</strong><span>Compose circuits from readable model and part libraries. Parameters resolve from part defaults to instance overrides, while equations and named internal quantities remain inspectable.</span></li>
-            <li><small>Symbolic → WebAssembly</small><strong>Compiled solvers</strong><span>The Python core turns each circuit's equations into a compact numerical solver. WebAssembly then runs the actual analysis responsively inside the browser.</span></li>
-            <li><small>Nonlinear / transient / AC</small><strong>Useful analysis</strong><span>Solve operating points, adaptive implicit transients, and linearized small-signal frequency responses. Select net, port, and model-defined signals directly from the schematic.</span></li>
+            <li><small>Symbolic → WebAssembly</small><strong>Compiled solvers</strong><span>The Python core turns each circuit's equations into a compact numerical solver. The actual simulation runs responsively inside the browser as a WebAssembly module. The Python core offers NumPy and SciPy targets as well, enabling programmatic circuit analysis.</span></li>
+            <li><small>Nonlinear / transient / AC</small><strong>Simulation Insights</strong><span>Solve operating points, transient response, and linearized small-signal AC response. Select net, port, and model-defined signals directly from the schematic.</span></li>
         </ul>
     </section>
 
@@ -75,7 +75,7 @@
             <p class="landing-index">05 / CONTACT</p>
             <h2>Tillmann Stübler</h2>
             <a href="mailto:ts109@pm.me">ts109@pm.me</a>
-            <p>Questions, ideas, experiments, and bug reports are welcome.</p>
+            <p>Questions, ideas, and bug reports are welcome.</p>
         </article>
         <article class="landing-card landing-privacy">
             <p class="landing-index">06 / POLICY</p>
@@ -122,6 +122,7 @@
         <h2 id="toolsHeading">Tools</h2>
         <div class="tool-grid">
             <button type="button" data-tool="select">Select</button>
+            <button type="button" id="fitSchematic">Fit schematic</button>
             <div class="button-grid history-actions">
                 <button type="button" data-history="undo" title="Undo (Ctrl/Cmd+Z)" disabled>Undo</button>
                 <button type="button" data-history="redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled>Redo</button>
@@ -167,6 +168,8 @@
     </section>
 </main>
 
+<aside id="editorToast" role="status" aria-live="polite" hidden><span></span><button type="button">Undo</button></aside>
+
 <aside id="circuitLists" aria-label="Circuit objects">
     <section aria-labelledby="elementsHeading">
         <h2 id="elementsHeading">Elements</h2>
@@ -209,6 +212,6 @@
     <span id="statusState">EDITABLE</span>
 </footer>
 
-<script type="module" src="./editor.js?v=56"></script>
+<script type="module" src="./editor.js?v=58"></script>
 </body>
 </html>

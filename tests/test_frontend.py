@@ -23,8 +23,8 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("No cookies", document)
         self.assertIn("MIT License", document)
         self.assertIn('<meta name="viewport" content="width=device-width, initial-scale=1">', document)
-        self.assertIn('href="./styles.css?v=36"', document)
-        self.assertIn('src="./editor.js?v=56"', document)
+        self.assertIn('href="./styles.css?v=37"', document)
+        self.assertIn('src="./editor.js?v=57"', document)
         self.assertIn('id="manualHeading"', document)
         self.assertIn("The useful gestures.", document)
         self.assertNotIn("No specialist workflow required", document)
@@ -114,6 +114,10 @@ class FrontendCircuitTest(unittest.TestCase):
         self.assertIn("function moveSelected(dx, dy)", editor)
         self.assertIn("body.properties-collapsed", styles)
         self.assertIn("grid-template-rows: repeat(2, 46px)", styles)
+        self.assertIn('id="fitSchematic"', document)
+        self.assertIn('id="editorToast"', document)
+        self.assertIn("function fitSchematic()", editor)
+        self.assertIn("function showUndoToast(message)", editor)
 
     def test_parameter_changes_do_not_rebuild_the_focused_property_form(self) -> None:
         """Native Tab navigation survives committing a parameter edit."""

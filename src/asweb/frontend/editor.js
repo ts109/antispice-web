@@ -4,9 +4,9 @@ import {definitionDisplayName, ensureGenericSymbol, library, modelFamily, modelP
 import {initializeLandingPage} from "./landing.js?v=1";
 import {GRID, distance, rotatePoint, rotatedAxis, routeOrthogonally, snap, snapPoint} from "./routing.js?v=11";
 import {circuit, detachCircuitNodes, generateCompilationElements, generateNetlist, netForNode, netNameError, nextReference, nodeAnchor, nodeDegree, nodePosition, rebuildNets as rebuildCircuitNets, referenceError, replaceCircuit, serializeCircuit, takeId, withImmutableId} from "./circuit.js?v=15";
-import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=10";
+import {TransientPlot, logarithmicAxisTicks} from "./plot.js?v=11";
 import {emptyCircuitSnapshot, SchematicStore} from "./schematics.js?v=1";
-import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=2";
+import {compileSimulation, createTransientState, runTransient, transientConfiguration} from "./simulation.js?v=3";
 
 const NS = "http://www.w3.org/2000/svg";
 window.generateNetlist = generateNetlist;
@@ -32,6 +32,7 @@ const netsHeading = document.querySelector("#netsHeading");
 const propertiesHeading = document.querySelector("#propertiesHeading");
 const plotHeading = document.querySelector("#plotHeading");
 const plotFitButton = document.querySelector("#plotFit");
+const fitSchematicButton = document.querySelector("#fitSchematic");
 const componentTools = document.querySelector("#componentTools");
 const componentFilter = document.querySelector("#componentFilter");
 const statusMode = document.querySelector("#statusMode");
@@ -53,12 +54,21 @@ const redoButton = document.querySelector('[data-history="redo"]');
 const selectionSummary = document.querySelector("#selectionSummary");
 const properties = document.querySelector("#properties");
 const togglePropertiesButton = document.querySelector("#toggleProperties");
+const editorToast = document.querySelector("#editorToast");
 
 const schematicStore = new SchematicStore(localStorage);
 let saveTimer = null;
 let historyTimer = null;
 let history = [];
 let historyIndex = -1;
+let toastTimer = null;
+
+function showUndoToast(message) {
+    clearTimeout(toastTimer);
+    editorToast.querySelector("span").textContent = message;
+    editorToast.hidden = false;
+    toastTimer = setTimeout(() => editorToast.hidden = true, 5000);
+}
 
 function snapshotSignature(snapshot) {
     return JSON.stringify(snapshot);
@@ -292,6 +302,7 @@ function enterSelectMode() {
 
     updateToolbar();
     renderOverlay();
+    updateStatus();
 }
 
 
@@ -307,6 +318,7 @@ function enterPlacementMode(type) {
 
     updateToolbar();
     renderOverlay();
+    updateStatus();
 }
 
 
@@ -323,6 +335,7 @@ function cancelCurrentOperation() {
 
     updateToolbar();
     renderOverlay();
+    updateStatus();
 }
 
 
@@ -558,7 +571,9 @@ function updateStatus() {
         statusMode.append(dots);
         statusMode.setAttribute("aria-label", "Compiling circuit");
     } else {
-        statusMode.textContent = application.mode === "edit" ? "EDIT" : application.mode === "ac" ? "AC" : "SIMULATE";
+        statusMode.textContent = application.mode === "edit"
+            ? drawingWire ? "WIRE" : placingType ? `PLACE ${definitionDisplayName(placingType, availableDefinitions()[placingType] ?? {}, resolveModelName(placingType))}` : "EDIT"
+            : application.mode === "ac" ? "AC" : "SIMULATE";
         statusMode.removeAttribute("aria-label");
     }
     statusZoom.textContent = `${Math.round(100 / scale)}%`;
@@ -763,6 +778,12 @@ for (const button of duplicateSelectionButtons) {
 undoButton.addEventListener("click", () => undo());
 redoButton.addEventListener("click", () => redo());
 plotFitButton.addEventListener("click", () => transientPlot.fit());
+fitSchematicButton.addEventListener("click", () => fitSchematic());
+editorToast.querySelector("button").addEventListener("click", () => {
+    clearTimeout(toastTimer);
+    editorToast.hidden = true;
+    undo();
+});
 componentFilter.addEventListener("input", () => rebuildComponentTools());
 togglePropertiesButton.addEventListener("click", () => {
     const collapsed = properties.classList.toggle("properties-collapsed");
@@ -1566,6 +1587,7 @@ function handleNodeClick(nodeId) {
         select({kind: "node", id: nodeId});
         drawingWire = {startNode: nodeId, mouse: nodePosition(nodeId), waypoints: []};
         renderOverlay();
+        updateStatus();
 
         return;
     }
@@ -1574,6 +1596,7 @@ function handleNodeClick(nodeId) {
     if (drawingWire.startNode === nodeId) {
         drawingWire = null;
         renderOverlay();
+        updateStatus();
 
         return;
     }
@@ -1582,6 +1605,7 @@ function handleNodeClick(nodeId) {
     createWire(drawingWire.startNode, nodeId, drawingWire.waypoints);
     drawingWire = null;
     renderOverlay();
+    updateStatus();
 }
 
 
@@ -2525,6 +2549,8 @@ function deleteSelected() {
     }
     if (!selected)
         return;
+    if (!["waypoint", "wire", "marker", "element"].includes(selected.kind)) return;
+    const deletedDescription = selectionDescription();
 
     // --------------------------------------------------
     // Wire
@@ -2578,6 +2604,7 @@ function deleteSelected() {
     renderAllWires();
     renderProperties();
     scheduleSchematicSave();
+    showUndoToast(`Deleted ${deletedDescription}`);
 }
 
 
@@ -2708,6 +2735,35 @@ function resizeViewport() {
         viewport.y = center.y - viewport.height / 2;
     }
     viewportPixels = {width: rect.width, height: rect.height};
+    updateViewBox();
+}
+
+function fitSchematic() {
+    if (!viewportPixels.width || !viewportPixels.height) return;
+    const points = [...circuit.nodes.values()].map(node => ({x: node.x, y: node.y}));
+    if (!points.length) {
+        viewport = {x: 0, y: 0, width: viewportPixels.width, height: viewportPixels.height};
+        updateViewBox();
+        return;
+    }
+    const padding = 60;
+    let minimumX = Math.min(...points.map(point => point.x)) - padding;
+    let maximumX = Math.max(...points.map(point => point.x)) + padding;
+    let minimumY = Math.min(...points.map(point => point.y)) - padding;
+    let maximumY = Math.max(...points.map(point => point.y)) + padding;
+    const targetRatio = viewportPixels.width / viewportPixels.height;
+    const width = Math.max(GRID * 4, maximumX - minimumX);
+    const height = Math.max(GRID * 4, maximumY - minimumY);
+    if (width / height > targetRatio) {
+        const nextHeight = width / targetRatio;
+        minimumY -= (nextHeight - height) / 2;
+        maximumY += (nextHeight - height) / 2;
+    } else {
+        const nextWidth = height * targetRatio;
+        minimumX -= (nextWidth - width) / 2;
+        maximumX += (nextWidth - width) / 2;
+    }
+    viewport = {x: minimumX, y: minimumY, width: maximumX - minimumX, height: maximumY - minimumY};
     updateViewBox();
 }
 

@@ -6,7 +6,7 @@ export function createTransientState() {
         visibleElementSignals: new Map(),
         startTime: "0",
         endTime: "",
-        minimumStepSize: "",
+        minimumStepSize: "1e-10",
         maximumStepSize: "",
         relativeTolerance: "1e-4",
         voltageAbsoluteTolerance: "1e-7",
